@@ -1,0 +1,1535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tasks - Domain Price Searcher</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    /* ========== MOBILE HEADER ========== */
+    .mobile-header {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 60px;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+      z-index: 200;
+      padding: 0 16px;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .mobile-header .logo-text {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .hamburger-btn {
+      width: 40px;
+      height: 40px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      cursor: pointer;
+      transition: all var(--transition-base);
+    }
+
+    .hamburger-btn:hover {
+      background: var(--bg-hover);
+    }
+
+    .hamburger-btn span {
+      display: block;
+      width: 18px;
+      height: 2px;
+      background: var(--text-secondary);
+      border-radius: 1px;
+      transition: all var(--transition-base);
+    }
+
+    .hamburger-btn.active span:nth-child(1) {
+      transform: rotate(45deg) translate(4px, 4px);
+    }
+
+    .hamburger-btn.active span:nth-child(2) {
+      opacity: 0;
+    }
+
+    .hamburger-btn.active span:nth-child(3) {
+      transform: rotate(-45deg) translate(4px, -4px);
+    }
+
+    /* Mobile menu overlay */
+    .mobile-menu-overlay {
+      display: none;
+      position: fixed;
+      top: 60px;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 150;
+      opacity: 0;
+      transition: opacity var(--transition-base);
+    }
+
+    .mobile-menu-overlay.active {
+      opacity: 1;
+    }
+
+    .mobile-menu {
+      position: fixed;
+      top: 60px;
+      left: 0;
+      width: 280px;
+      height: calc(100vh - 60px);
+      background: var(--bg-surface);
+      border-right: 1px solid var(--border);
+      transform: translateX(-100%);
+      transition: transform var(--transition-slow);
+      z-index: 160;
+      padding: 16px;
+      overflow-y: auto;
+    }
+
+    .mobile-menu.active {
+      transform: translateX(0);
+    }
+
+    .mobile-nav-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 16px;
+      color: var(--text-secondary);
+      text-decoration: none;
+      border-radius: var(--radius-md);
+      margin-bottom: 4px;
+      transition: all var(--transition-base);
+      font-weight: 500;
+    }
+
+    .mobile-nav-item svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    .mobile-nav-item:hover {
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+    }
+
+    .mobile-nav-item.active {
+      background: var(--primary-bg);
+      color: var(--primary-light);
+    }
+
+    /* ========== PAGE HEADER ========== */
+    .page-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .page-header-left h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .page-header-left p {
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+    }
+
+    /* ========== FILTER BAR ========== */
+    .filter-bar {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+
+    .filter-select {
+      padding: 10px 16px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      color: var(--text-primary);
+      font-size: 0.9rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all var(--transition-base);
+      min-width: 140px;
+    }
+
+    .filter-select:hover {
+      border-color: var(--border-light);
+    }
+
+    .filter-select:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--primary-bg);
+    }
+
+    /* ========== BUTTONS ========== */
+    .btn-new-task {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 20px;
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      color: white;
+      border: none;
+      border-radius: var(--radius-md);
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all var(--transition-base);
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    }
+
+    .btn-new-task:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+    }
+
+    .btn-new-task:active {
+      transform: translateY(0);
+    }
+
+    .btn-new-task svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    /* ========== TASK CARDS ========== */
+    .tasks-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .task-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 20px 24px;
+      transition: all var(--transition-base);
+    }
+
+    .task-card:hover {
+      border-color: var(--primary);
+      box-shadow: 0 4px 20px rgba(99, 102, 241, 0.15);
+    }
+
+    .task-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 16px;
+      gap: 16px;
+    }
+
+    .task-info h3 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 6px;
+    }
+
+    .task-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .task-meta span {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* Status Badges */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: var(--radius-full);
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .status-badge .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .status-badge.pending {
+      background: rgba(100, 116, 139, 0.15);
+      color: #94a3b8;
+    }
+
+    .status-badge.running {
+      background: rgba(59, 130, 246, 0.15);
+      color: #3b82f6;
+    }
+
+    .status-badge.running .dot {
+      animation: pulse-dot 1.5s ease-in-out infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.8); }
+    }
+
+    .status-badge.paused {
+      background: rgba(245, 158, 11, 0.15);
+      color: #f59e0b;
+    }
+
+    .status-badge.completed {
+      background: rgba(34, 197, 94, 0.15);
+      color: #22c55e;
+    }
+
+    .status-badge.cancelled {
+      background: rgba(239, 68, 68, 0.15);
+      color: #ef4444;
+    }
+
+    .status-badge.queued {
+      background: rgba(168, 85, 247, 0.15);
+      color: #a855f7;
+    }
+
+    /* ========== PROGRESS BAR ========== */
+    .task-progress {
+      margin-bottom: 20px;
+    }
+
+    .progress-bar-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 12px;
+    }
+
+    .progress-track {
+      flex: 1;
+      height: 10px;
+      background: var(--bg-base);
+      border-radius: var(--radius-full);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--primary), var(--primary-light));
+      border-radius: var(--radius-full);
+      transition: width 0.5s ease;
+      position: relative;
+    }
+
+    .progress-fill.completed {
+      background: linear-gradient(90deg, var(--success), var(--success-light));
+    }
+
+    .progress-fill.running::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 255, 255, 0.3),
+        transparent
+      );
+      animation: shimmer 1.5s infinite;
+    }
+
+    @keyframes shimmer {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+
+    .progress-percent {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--primary-light);
+      min-width: 50px;
+      text-align: right;
+    }
+
+    .progress-stats {
+      display: flex;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+
+    .stat-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.9rem;
+    }
+
+    .stat-item svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .stat-item.success {
+      color: var(--success);
+    }
+
+    .stat-item.failed {
+      color: var(--danger);
+    }
+
+    .stat-item.pending {
+      color: var(--text-muted);
+    }
+
+    /* ========== TASK ACTIONS ========== */
+    .task-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+
+    .task-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      border-radius: var(--radius-md);
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all var(--transition-base);
+      border: 1px solid var(--border);
+      background: var(--bg-elevated);
+      color: var(--text-secondary);
+    }
+
+    .task-btn:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+      border-color: var(--border-light);
+    }
+
+    .task-btn svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .task-btn.primary {
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      color: white;
+      border: none;
+      box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+    }
+
+    .task-btn.primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+    }
+
+    .task-btn.danger {
+      color: var(--danger);
+    }
+
+    .task-btn.danger:hover {
+      background: var(--danger-bg);
+      border-color: var(--danger);
+    }
+
+    /* ========== EMPTY STATE ========== */
+    .empty-state {
+      text-align: center;
+      padding: 80px 32px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+    }
+
+    .empty-state-icon {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto 24px;
+      background: linear-gradient(135deg, var(--primary-bg), rgba(99, 102, 241, 0.2));
+      border-radius: var(--radius-lg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .empty-state-icon svg {
+      width: 40px;
+      height: 40px;
+      color: var(--primary);
+    }
+
+    .empty-state h3 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+    }
+
+    .empty-state p {
+      color: var(--text-secondary);
+      margin-bottom: 24px;
+      max-width: 400px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    /* ========== MODAL STYLES ========== */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      opacity: 0;
+      transition: opacity var(--transition-base);
+    }
+
+    .modal-overlay.active {
+      display: flex;
+      opacity: 1;
+    }
+
+    .modal {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      width: 100%;
+      max-width: 520px;
+      max-height: 85vh;
+      overflow: hidden;
+      transform: scale(0.95) translateY(20px);
+      transition: transform var(--transition-slow);
+      box-shadow: var(--shadow-lg);
+    }
+
+    .modal-overlay.active .modal {
+      transform: scale(1) translateY(0);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-elevated);
+    }
+
+    .modal-title {
+      font-size: 1.15rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .modal-close {
+      width: 36px;
+      height: 36px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      color: var(--text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all var(--transition-base);
+    }
+
+    .modal-close:hover {
+      background: var(--danger-bg);
+      border-color: var(--danger);
+      color: var(--danger);
+    }
+
+    .modal-close svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .modal-body {
+      padding: 24px;
+      overflow-y: auto;
+      max-height: calc(85vh - 140px);
+    }
+
+    .modal-footer {
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+      padding: 20px 24px;
+      border-top: 1px solid var(--border);
+      background: var(--bg-elevated);
+    }
+
+    /* ========== FORM STYLES ========== */
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+    }
+
+    .form-input {
+      width: 100%;
+      padding: 12px 16px;
+      background: var(--bg-base);
+      border: 2px solid var(--border);
+      border-radius: var(--radius-md);
+      color: var(--text-primary);
+      font-size: 0.95rem;
+      transition: all var(--transition-base);
+    }
+
+    .form-input:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--primary-bg);
+    }
+
+    .form-input::placeholder {
+      color: var(--text-muted);
+    }
+
+    .form-textarea {
+      min-height: 160px;
+      resize: vertical;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      line-height: 1.6;
+    }
+
+    .form-hint {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-top: 6px;
+    }
+
+    /* ========== TASK DETAIL MODAL ========== */
+    .task-detail-modal .modal {
+      max-width: 700px;
+    }
+
+    .domain-list {
+      max-height: 450px;
+      overflow-y: auto;
+    }
+
+    .domain-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      transition: background var(--transition-fast);
+    }
+
+    .domain-item:last-child {
+      border-bottom: none;
+    }
+
+    .domain-item:hover {
+      background: var(--bg-elevated);
+    }
+
+    .domain-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .domain-status-icon {
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .domain-status-icon svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .domain-status-icon.completed { color: var(--success); }
+    .domain-status-icon.failed { color: var(--danger); }
+    .domain-status-icon.running { color: var(--primary); }
+    .domain-status-icon.pending { color: var(--text-muted); }
+    .domain-status-icon.skipped { color: var(--text-muted); }
+
+    .domain-name {
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .domain-result {
+      text-align: right;
+      font-size: 0.9rem;
+    }
+
+    .domain-price {
+      color: var(--success);
+      font-weight: 700;
+    }
+
+    .domain-error {
+      color: var(--danger);
+      font-size: 0.8rem;
+    }
+
+    /* Spinner */
+    .spinner {
+      width: 18px;
+      height: 18px;
+      border: 2px solid var(--border);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* ========== RESPONSIVE ========== */
+    @media (max-width: 768px) {
+      .mobile-header {
+        display: flex;
+      }
+
+      .sidebar {
+        display: none;
+      }
+
+      .main-content {
+        margin-left: 0;
+        margin-top: 60px;
+        max-width: 100%;
+        padding: 20px 16px;
+      }
+
+      .page-header {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .btn-new-task {
+        width: 100%;
+        justify-content: center;
+      }
+
+      .task-card {
+        padding: 16px;
+      }
+
+      .task-card-header {
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .progress-stats {
+        gap: 16px;
+      }
+
+      .task-actions {
+        justify-content: center;
+      }
+
+      .modal {
+        max-width: 100%;
+        max-height: 90vh;
+        margin: 0;
+        border-radius: var(--radius-md);
+      }
+
+      .modal-footer {
+        flex-direction: column;
+      }
+
+      .modal-footer .task-btn {
+        width: 100%;
+        justify-content: center;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Mobile Header -->
+  <header class="mobile-header">
+    <span class="logo-text">PriceSearch</span>
+    <button class="hamburger-btn" id="hamburger-btn">
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
+  </header>
+
+  <!-- Mobile Menu Overlay -->
+  <div class="mobile-menu-overlay" id="mobile-overlay"></div>
+
+  <!-- Mobile Menu -->
+  <nav class="mobile-menu" id="mobile-menu">
+    <a href="index.html" class="mobile-nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="8"/>
+        <path d="m21 21-4.35-4.35"/>
+      </svg>
+      Search
+    </a>
+    <a href="tasks.html" class="mobile-nav-item active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M9 11l3 3L22 4"/>
+        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+      </svg>
+      Tasks
+    </a>
+    <a href="publishers.html" class="mobile-nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+        <polyline points="14 2 14 8 20 8"/>
+      </svg>
+      Publishers
+    </a>
+  </nav>
+
+  <div class="app-container">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="logo">
+        <div class="logo-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/>
+            <path d="m21 21-4.35-4.35"/>
+          </svg>
+        </div>
+        <span class="logo-text">PriceSearch</span>
+      </div>
+
+      <nav class="nav-menu">
+        <a href="index.html" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/>
+            <path d="m21 21-4.35-4.35"/>
+          </svg>
+          Search
+        </a>
+        <a href="tasks.html" class="nav-item active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 11l3 3L22 4"/>
+            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+          </svg>
+          Tasks
+        </a>
+        <a href="publishers.html" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+            <polyline points="14 2 14 8 20 8"/>
+          </svg>
+          Publishers
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="email-accounts">
+          <div class="account-badge">4 Email Accounts</div>
+          <span class="status-dot"></span>
+          <span class="status-text">Connected</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <div class="page-header">
+        <div class="page-header-left">
+          <h1>Tasks</h1>
+          <p>Manage and track your batch domain searches</p>
+        </div>
+        <button class="btn-new-task" onclick="openNewTaskModal()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          New Task
+        </button>
+      </div>
+
+      <div class="filter-bar">
+        <select class="filter-select" id="statusFilter" onchange="loadTasks()">
+          <option value="all">All Status</option>
+          <option value="pending">Pending</option>
+          <option value="queued">Queued</option>
+          <option value="running">Running</option>
+          <option value="paused">Paused</option>
+          <option value="completed">Completed</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+      </div>
+
+      <div id="tasksList" class="tasks-grid">
+        <!-- Tasks will be loaded here -->
+      </div>
+    </main>
+  </div>
+
+  <!-- New Task Modal -->
+  <div class="modal-overlay" id="newTaskModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 class="modal-title">Create New Task</h2>
+        <button class="modal-close" onclick="closeNewTaskModal()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Task Name (optional)</label>
+          <input type="text" class="form-input" id="taskName" placeholder="e.g., Tech Blogs Batch">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Domains</label>
+          <textarea class="form-input form-textarea" id="taskDomains" placeholder="Enter domains, one per line:&#10;&#10;example1.com&#10;example2.com&#10;example3.com"></textarea>
+          <p class="form-hint">Enter one domain per line, or paste a comma-separated list</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="task-btn" onclick="closeNewTaskModal()">Cancel</button>
+        <button class="task-btn" onclick="createTask(false)">Create</button>
+        <button class="task-btn primary" onclick="createTask(true)">Create & Start</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Task Detail Modal -->
+  <div class="modal-overlay task-detail-modal" id="taskDetailModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 class="modal-title" id="detailTaskName">Task Details</h2>
+        <button class="modal-close" onclick="closeTaskDetailModal()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div id="detailContent">
+          <!-- Domain list will be loaded here -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="task-btn" id="detailRetryBtn" onclick="retryFailed()" style="display: none;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M1 4v6h6"></path>
+            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+          </svg>
+          Retry Failed
+        </button>
+        <button class="task-btn" id="detailExportBtn" onclick="exportTask()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          Export CSV
+        </button>
+        <button class="task-btn" onclick="closeTaskDetailModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentDetailTaskId = null;
+    let eventSource = null;
+
+    // Mobile menu toggle
+    const hamburgerBtn = document.getElementById('hamburger-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const mobileOverlay = document.getElementById('mobile-overlay');
+
+    hamburgerBtn.addEventListener('click', () => {
+      hamburgerBtn.classList.toggle('active');
+      mobileMenu.classList.toggle('active');
+      mobileOverlay.classList.toggle('active');
+    });
+
+    mobileOverlay.addEventListener('click', () => {
+      hamburgerBtn.classList.remove('active');
+      mobileMenu.classList.remove('active');
+      mobileOverlay.classList.remove('active');
+    });
+
+    // Load tasks on page load
+    document.addEventListener('DOMContentLoaded', async () => {
+      await loadTasks();
+
+      // Check for ?view=ID parameter to auto-open task details
+      const urlParams = new URLSearchParams(window.location.search);
+      const viewTaskId = urlParams.get('view');
+      if (viewTaskId) {
+        viewTaskDetails(parseInt(viewTaskId));
+        window.history.replaceState({}, '', 'tasks.html');
+      }
+    });
+
+    async function loadTasks() {
+      const status = document.getElementById('statusFilter').value;
+      const tasksList = document.getElementById('tasksList');
+
+      try {
+        const url = status === 'all' ? '/api/tasks' : `/api/tasks?status=${status}`;
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (data.tasks.length === 0) {
+          tasksList.innerHTML = `
+            <div class="empty-state">
+              <div class="empty-state-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M9 11l3 3L22 4"></path>
+                  <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                </svg>
+              </div>
+              <h3>No tasks yet</h3>
+              <p>Create a new task to start batch searching domains for pricing information</p>
+              <button class="btn-new-task" onclick="openNewTaskModal()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                Create First Task
+              </button>
+            </div>
+          `;
+          return;
+        }
+
+        tasksList.innerHTML = data.tasks.map(task => renderTaskCard(task)).join('');
+      } catch (error) {
+        console.error('Error loading tasks:', error);
+        tasksList.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+              </svg>
+            </div>
+            <h3>Error loading tasks</h3>
+            <p>Something went wrong while loading your tasks. Please try again.</p>
+          </div>
+        `;
+      }
+    }
+
+    function renderTaskCard(task) {
+      const progress = task.total_domains > 0 ? Math.round((task.completed_domains / task.total_domains) * 100) : 0;
+      const isComplete = task.status === 'completed' || task.status === 'cancelled';
+      const isRunning = task.status === 'running';
+
+      return `
+        <div class="task-card" data-task-id="${task.id}">
+          <div class="task-card-header">
+            <div class="task-info">
+              <h3>${escapeHtml(task.name)}</h3>
+              <div class="task-meta">
+                <span>${task.total_domains} domains</span>
+                <span>Created ${formatDate(task.created_at)}</span>
+              </div>
+            </div>
+            <span class="status-badge ${task.status}">
+              <span class="dot"></span>
+              ${capitalizeFirst(task.status)}
+            </span>
+          </div>
+
+          <div class="task-progress">
+            <div class="progress-bar-wrapper">
+              <div class="progress-track">
+                <div class="progress-fill ${isComplete ? 'completed' : ''} ${isRunning ? 'running' : ''}" style="width: ${progress}%"></div>
+              </div>
+              <span class="progress-percent">${progress}%</span>
+            </div>
+            <div class="progress-stats">
+              <span class="stat-item success">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+                ${task.successful_domains} found
+              </span>
+              <span class="stat-item failed">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+                ${task.failed_domains} failed
+              </span>
+              <span class="stat-item pending">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"></circle>
+                </svg>
+                ${task.total_domains - task.completed_domains} pending
+              </span>
+            </div>
+          </div>
+
+          <div class="task-actions">
+            ${getTaskActions(task)}
+          </div>
+        </div>
+      `;
+    }
+
+    function getTaskActions(task) {
+      let actions = [];
+
+      switch (task.status) {
+        case 'pending':
+          actions.push(`<button class="task-btn primary" onclick="startTask(${task.id})">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+            Start
+          </button>`);
+          break;
+        case 'queued':
+          actions.push(`<button class="task-btn" disabled style="opacity: 0.6; cursor: default;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+            Waiting...
+          </button>`);
+          actions.push(`<button class="task-btn danger" onclick="cancelTask(${task.id})">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+            Remove from Queue
+          </button>`);
+          break;
+        case 'running':
+          actions.push(`<button class="task-btn" onclick="pauseTask(${task.id})">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="6" y="4" width="4" height="16"></rect>
+              <rect x="14" y="4" width="4" height="16"></rect>
+            </svg>
+            Pause
+          </button>`);
+          actions.push(`<button class="task-btn danger" onclick="cancelTask(${task.id})">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+            </svg>
+            Cancel
+          </button>`);
+          break;
+        case 'paused':
+          actions.push(`<button class="task-btn primary" onclick="startTask(${task.id})">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+            Resume
+          </button>`);
+          actions.push(`<button class="task-btn danger" onclick="cancelTask(${task.id})">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+            </svg>
+            Cancel
+          </button>`);
+          break;
+        case 'completed':
+        case 'cancelled':
+          if (task.failed_domains > 0) {
+            actions.push(`<button class="task-btn" onclick="retryFailedDomains(${task.id})">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M1 4v6h6"></path>
+                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+              </svg>
+              Retry Failed
+            </button>`);
+          }
+          break;
+      }
+
+      // Common actions
+      actions.push(`<button class="task-btn" onclick="viewTaskDetails(${task.id})">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+          <circle cx="12" cy="12" r="3"></circle>
+        </svg>
+        View
+      </button>`);
+
+      actions.push(`<button class="task-btn danger" onclick="deleteTask(${task.id})">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="3 6 5 6 21 6"></polyline>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+        </svg>
+        Delete
+      </button>`);
+
+      return actions.join('');
+    }
+
+    // Task Actions
+    async function startTask(taskId) {
+      try {
+        await fetch(`/api/tasks/${taskId}/start`, { method: 'POST' });
+        loadTasks();
+        connectTaskSSE(taskId);
+      } catch (error) {
+        console.error('Error starting task:', error);
+        alert('Failed to start task');
+      }
+    }
+
+    async function pauseTask(taskId) {
+      try {
+        await fetch(`/api/tasks/${taskId}/pause`, { method: 'POST' });
+        loadTasks();
+      } catch (error) {
+        console.error('Error pausing task:', error);
+        alert('Failed to pause task');
+      }
+    }
+
+    async function cancelTask(taskId) {
+      if (!confirm('Are you sure you want to cancel this task?')) return;
+
+      try {
+        await fetch(`/api/tasks/${taskId}/cancel`, { method: 'POST' });
+        loadTasks();
+      } catch (error) {
+        console.error('Error cancelling task:', error);
+        alert('Failed to cancel task');
+      }
+    }
+
+    async function retryFailedDomains(taskId) {
+      try {
+        const response = await fetch(`/api/tasks/${taskId}/retry-failed`, { method: 'POST' });
+        const data = await response.json();
+        alert(`${data.domainsRetried} domains queued for retry`);
+        loadTasks();
+      } catch (error) {
+        console.error('Error retrying failed domains:', error);
+        alert('Failed to retry domains');
+      }
+    }
+
+    async function deleteTask(taskId) {
+      if (!confirm('Are you sure you want to delete this task?')) return;
+
+      try {
+        await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
+        loadTasks();
+      } catch (error) {
+        console.error('Error deleting task:', error);
+        alert('Failed to delete task');
+      }
+    }
+
+    // Modal Functions
+    function openNewTaskModal() {
+      const modal = document.getElementById('newTaskModal');
+      modal.classList.add('active');
+      document.getElementById('taskName').value = '';
+      document.getElementById('taskDomains').value = '';
+      document.getElementById('taskName').focus();
+    }
+
+    function closeNewTaskModal() {
+      document.getElementById('newTaskModal').classList.remove('active');
+    }
+
+    async function createTask(startImmediately) {
+      const name = document.getElementById('taskName').value.trim();
+      const domainsText = document.getElementById('taskDomains').value.trim();
+
+      if (!domainsText) {
+        alert('Please enter at least one domain');
+        return;
+      }
+
+      const domains = domainsText.split(/[\n,]+/).map(d => d.trim()).filter(d => d);
+
+      if (domains.length === 0) {
+        alert('Please enter at least one valid domain');
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/tasks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name || undefined, domains })
+        });
+
+        const data = await response.json();
+
+        if (!data.success) {
+          alert(data.error || 'Failed to create task');
+          return;
+        }
+
+        closeNewTaskModal();
+
+        if (startImmediately) {
+          await startTask(data.task.id);
+        }
+
+        loadTasks();
+      } catch (error) {
+        console.error('Error creating task:', error);
+        alert('Failed to create task');
+      }
+    }
+
+    async function viewTaskDetails(taskId) {
+      currentDetailTaskId = taskId;
+
+      try {
+        const response = await fetch(`/api/tasks/${taskId}`);
+        const data = await response.json();
+
+        document.getElementById('detailTaskName').textContent = data.task.name;
+        document.getElementById('detailRetryBtn').style.display = data.task.failed_domains > 0 ? 'flex' : 'none';
+
+        const content = document.getElementById('detailContent');
+        content.innerHTML = `
+          <div class="domain-list">
+            ${data.domains.map(d => renderDomainItem(d)).join('')}
+          </div>
+        `;
+
+        document.getElementById('taskDetailModal').classList.add('active');
+
+        if (data.task.status === 'running') {
+          connectDetailSSE(taskId);
+        }
+      } catch (error) {
+        console.error('Error loading task details:', error);
+        alert('Failed to load task details');
+      }
+    }
+
+    function renderDomainItem(domain) {
+      let statusIcon = '';
+      let result = '';
+
+      switch (domain.status) {
+        case 'completed':
+          statusIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+          if (domain.guest_post_price) {
+            result = `<span class="domain-price">${domain.currency || 'USD'} ${domain.guest_post_price}</span>`;
+          } else {
+            result = `<span style="color: var(--text-muted)">No price found</span>`;
+          }
+          break;
+        case 'failed':
+          statusIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
+          result = `<span class="domain-error">${escapeHtml(domain.error_message || 'Error')}</span>`;
+          break;
+        case 'running':
+          statusIcon = `<div class="spinner"></div>`;
+          result = `<span style="color: var(--text-muted)">Processing...</span>`;
+          break;
+        case 'skipped':
+          statusIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"></line></svg>`;
+          result = `<span style="color: var(--text-muted)">Skipped</span>`;
+          break;
+        default:
+          statusIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle></svg>`;
+          result = `<span style="color: var(--text-muted)">Pending</span>`;
+      }
+
+      return `
+        <div class="domain-item">
+          <div class="domain-info">
+            <span class="domain-status-icon ${domain.status}">${statusIcon}</span>
+            <span class="domain-name">${escapeHtml(domain.domain)}</span>
+          </div>
+          <div class="domain-result">${result}</div>
+        </div>
+      `;
+    }
+
+    function closeTaskDetailModal() {
+      document.getElementById('taskDetailModal').classList.remove('active');
+      currentDetailTaskId = null;
+      if (eventSource) {
+        eventSource.close();
+        eventSource = null;
+      }
+    }
+
+    function retryFailed() {
+      if (currentDetailTaskId) {
+        retryFailedDomains(currentDetailTaskId);
+        closeTaskDetailModal();
+      }
+    }
+
+    function exportTask() {
+      if (currentDetailTaskId) {
+        window.location.href = `/api/tasks/${currentDetailTaskId}/export`;
+      }
+    }
+
+    // SSE for live updates
+    function connectTaskSSE(taskId) {
+      const source = new EventSource(`/api/tasks/${taskId}/stream`);
+
+      source.addEventListener('update', (event) => {
+        const data = JSON.parse(event.data);
+        const card = document.querySelector(`[data-task-id="${taskId}"]`);
+        if (card) {
+          card.outerHTML = renderTaskCard(data.task);
+        }
+
+        if (data.task.status === 'completed' || data.task.status === 'cancelled' || data.task.status === 'paused') {
+          source.close();
+        }
+      });
+
+      source.onerror = () => {
+        source.close();
+        setTimeout(loadTasks, 1000);
+      };
+    }
+
+    function connectDetailSSE(taskId) {
+      if (eventSource) {
+        eventSource.close();
+      }
+
+      eventSource = new EventSource(`/api/tasks/${taskId}/stream`);
+
+      eventSource.addEventListener('update', (event) => {
+        const data = JSON.parse(event.data);
+
+        const content = document.getElementById('detailContent');
+        content.innerHTML = `
+          <div class="domain-list">
+            ${data.domains.map(d => renderDomainItem(d)).join('')}
+          </div>
+        `;
+
+        document.getElementById('detailRetryBtn').style.display = data.task.failed_domains > 0 ? 'flex' : 'none';
+
+        if (data.task.status === 'completed' || data.task.status === 'cancelled' || data.task.status === 'paused') {
+          eventSource.close();
+          eventSource = null;
+        }
+      });
+    }
+
+    // Close modals on escape key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closeNewTaskModal();
+        closeTaskDetailModal();
+      }
+    });
+
+    // Close modals on overlay click
+    document.querySelectorAll('.modal-overlay').forEach(overlay => {
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+          overlay.classList.remove('active');
+          if (overlay.id === 'taskDetailModal') {
+            currentDetailTaskId = null;
+            if (eventSource) {
+              eventSource.close();
+              eventSource = null;
+            }
+          }
+        }
+      });
+    });
+
+    // Utilities
+    function escapeHtml(text) {
+      if (!text) return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function capitalizeFirst(str) {
+      return str.charAt(0).toUpperCase() + str.slice(1);
+    }
+
+    function formatDate(dateStr) {
+      if (!dateStr) return '';
+      const date = new Date(dateStr);
+      const now = new Date();
+      const diff = now - date;
+
+      if (diff < 60000) return 'just now';
+      if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+      if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+
+      return date.toLocaleDateString();
+    }
+  </script>
+</body>
+</html>

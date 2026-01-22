@@ -1,0 +1,1205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Publisher List - Domain Price Searcher</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    /* Publisher Page Specific Styles */
+    .filter-bar {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .search-input-wrapper {
+      position: relative;
+      flex: 1;
+      min-width: 250px;
+    }
+
+    .search-input-wrapper svg {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 18px;
+      height: 18px;
+      color: var(--text-muted);
+    }
+
+    .search-input {
+      width: 100%;
+      padding: 0.75rem 1rem 0.75rem 2.5rem;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-size: 0.9rem;
+    }
+
+    .search-input:focus {
+      outline: none;
+      border-color: var(--primary-color);
+    }
+
+    .filter-select {
+      padding: 0.75rem 1rem;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+
+    .filter-select:focus {
+      outline: none;
+      border-color: var(--primary-color);
+    }
+
+    .price-filter {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: var(--bg-tertiary);
+      padding: 0.5rem 0.75rem;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+    }
+
+    .price-filter-label {
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    .price-input {
+      width: 70px;
+      padding: 0.5rem;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      color: var(--text-primary);
+      font-size: 0.85rem;
+      text-align: center;
+    }
+
+    .price-input:focus {
+      outline: none;
+      border-color: var(--primary-color);
+      background: var(--bg-primary);
+    }
+
+    .price-input::placeholder {
+      color: var(--text-muted);
+      opacity: 0.7;
+    }
+
+    .filter-divider {
+      color: var(--text-muted);
+      font-size: 0.8rem;
+    }
+
+    .bulk-actions {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+      padding: 0.75rem 1rem;
+      background: var(--bg-tertiary);
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      margin-bottom: 1rem;
+    }
+
+    .bulk-actions.hidden {
+      display: none;
+    }
+
+    .selected-count {
+      color: var(--primary-color);
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+
+    .bulk-btn {
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: all 0.2s;
+    }
+
+    .bulk-btn svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .bulk-btn-refresh {
+      background: var(--primary-color);
+      color: white;
+      border: none;
+    }
+
+    .bulk-btn-refresh:hover {
+      background: var(--primary-hover);
+    }
+
+    .bulk-btn-clear {
+      background: transparent;
+      color: var(--text-muted);
+      border: 1px solid var(--border-color);
+    }
+
+    .bulk-btn-clear:hover {
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+    }
+
+    .refresh-all-btn {
+      margin-left: auto;
+    }
+
+    .checkbox-cell {
+      width: 40px;
+      text-align: center;
+    }
+
+    .checkbox-cell input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+      accent-color: var(--primary-color);
+    }
+
+    .select-all-label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      cursor: pointer;
+      color: var(--text-secondary);
+      font-size: 0.85rem;
+    }
+
+    .stats-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .stat-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 1.25rem;
+      text-align: center;
+    }
+
+    .stat-card-value {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: var(--primary-color);
+    }
+
+    .stat-card-label {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-top: 0.25rem;
+    }
+
+    .publisher-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .publisher-table th {
+      background: var(--bg-tertiary);
+      padding: 0.875rem 1rem;
+      text-align: left;
+      font-weight: 600;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border-color);
+      cursor: pointer;
+      user-select: none;
+      white-space: nowrap;
+    }
+
+    .publisher-table th:hover {
+      color: var(--text-primary);
+    }
+
+    .publisher-table th.sorted {
+      color: var(--primary-color);
+    }
+
+    .publisher-table th .sort-icon {
+      margin-left: 0.25rem;
+      opacity: 0.5;
+    }
+
+    .publisher-table th.sorted .sort-icon {
+      opacity: 1;
+    }
+
+    .publisher-table td {
+      padding: 0.875rem 1rem;
+      border-bottom: 1px solid var(--border-color);
+      vertical-align: middle;
+    }
+
+    .publisher-table tr:hover {
+      background: var(--bg-tertiary);
+    }
+
+    .domain-link {
+      color: var(--primary-color);
+      text-decoration: none;
+      font-weight: 500;
+    }
+
+    .domain-link:hover {
+      text-decoration: underline;
+    }
+
+    .action-btns {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .action-btn {
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: none;
+      border-radius: 6px;
+      background: var(--bg-tertiary);
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .action-btn:hover {
+      background: var(--primary-color);
+      color: white;
+    }
+
+    .action-btn.favorite {
+      color: #fbbf24;
+    }
+
+    .action-btn.favorite.active {
+      background: rgba(251, 191, 36, 0.2);
+    }
+
+    .action-btn.delete:hover {
+      background: #ef4444;
+    }
+
+    .action-btn.refresh.loading {
+      pointer-events: none;
+    }
+
+    .action-btn.refresh.loading svg {
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    .action-btn svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .pagination {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 1.5rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border-color);
+    }
+
+    .pagination-info {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+
+    .pagination-btns {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .pagination-btn {
+      padding: 0.5rem 1rem;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      color: var(--text-primary);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .pagination-btn:hover:not(:disabled) {
+      background: var(--primary-color);
+      border-color: var(--primary-color);
+      color: white;
+    }
+
+    .pagination-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 4rem 2rem;
+      color: var(--text-muted);
+    }
+
+    .empty-state svg {
+      width: 64px;
+      height: 64px;
+      margin-bottom: 1rem;
+      opacity: 0.5;
+    }
+
+    .empty-state h3 {
+      color: var(--text-primary);
+      margin-bottom: 0.5rem;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 0.75rem;
+    }
+
+    .last-updated {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .contact-cell {
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="logo">
+        <div class="logo-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/>
+            <path d="m21 21-4.35-4.35"/>
+          </svg>
+        </div>
+        <span class="logo-text">PriceSearch</span>
+      </div>
+
+      <nav class="nav-menu">
+        <a href="index.html" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/>
+            <path d="m21 21-4.35-4.35"/>
+          </svg>
+          Search
+        </a>
+        <a href="tasks.html" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 11l3 3L22 4"/>
+            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+          </svg>
+          Tasks
+        </a>
+        <a href="publishers.html" class="nav-item active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+          </svg>
+          Publishers
+        </a>
+        <a href="#" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M12 1v6m0 6v6m11-7h-6m-6 0H1"/>
+          </svg>
+          Settings
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="email-accounts">
+          <div class="account-badge">4 Email Accounts</div>
+          <span class="status-dot"></span>
+          <span class="status-text">Connected</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Header -->
+      <header class="top-header">
+        <div class="header-left">
+          <h1>Publisher List</h1>
+          <p class="header-subtitle">All discovered publishers with pricing information</p>
+        </div>
+        <div class="header-actions">
+          <button id="refresh-all-btn" class="btn btn-primary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="23 4 23 10 17 10"/>
+              <polyline points="1 20 1 14 7 14"/>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+            </svg>
+            Refresh All
+          </button>
+          <button id="export-btn" class="btn btn-success">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Export CSV
+          </button>
+        </div>
+      </header>
+
+      <!-- Stats Cards -->
+      <section class="stats-cards" id="stats-cards">
+        <div class="stat-card">
+          <div class="stat-card-value" id="stat-total">0</div>
+          <div class="stat-card-label">Total Publishers</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-value" id="stat-casino">0</div>
+          <div class="stat-card-label">Casino OK</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-value" id="stat-avg-price">€0</div>
+          <div class="stat-card-label">Avg. Guest Post</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-value" id="stat-favorites">0</div>
+          <div class="stat-card-label">Favorites</div>
+        </div>
+      </section>
+
+      <!-- Filters -->
+      <section class="search-section">
+        <div class="search-card">
+          <div class="filter-bar">
+            <div class="search-input-wrapper">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"/>
+                <path d="m21 21-4.35-4.35"/>
+              </svg>
+              <input type="text" id="search-input" class="search-input" placeholder="Search domains, emails, contacts...">
+            </div>
+
+            <select id="casino-filter" class="filter-select">
+              <option value="all">All Casino Status</option>
+              <option value="yes">Casino OK</option>
+              <option value="no">No Casino</option>
+            </select>
+
+            <label style="display: flex; align-items: center; gap: 0.5rem; color: var(--text-secondary); cursor: pointer;">
+              <input type="checkbox" id="favorites-only"> Favorites only
+            </label>
+
+            <button id="clear-filters" class="btn btn-ghost">Clear Filters</button>
+          </div>
+
+          <!-- Advanced Filters Row -->
+          <div class="filter-bar" style="margin-top: 0.75rem;">
+            <div class="price-filter">
+              <span style="color: var(--text-muted); font-size: 0.85rem; min-width: 80px;">Guest Post:</span>
+              <input type="number" id="min-gp-price" class="price-input" placeholder="Min">
+              <span style="color: var(--text-muted);">-</span>
+              <input type="number" id="max-gp-price" class="price-input" placeholder="Max">
+            </div>
+
+            <div class="price-filter">
+              <span style="color: var(--text-muted); font-size: 0.85rem; min-width: 80px;">Link Insert:</span>
+              <input type="number" id="min-li-price" class="price-input" placeholder="Min">
+              <span style="color: var(--text-muted);">-</span>
+              <input type="number" id="max-li-price" class="price-input" placeholder="Max">
+            </div>
+
+            <div class="price-filter">
+              <span style="color: var(--text-muted); font-size: 0.85rem; min-width: 60px;">Casino:</span>
+              <input type="number" id="min-casino-price" class="price-input" placeholder="Min">
+              <span style="color: var(--text-muted);">-</span>
+              <input type="number" id="max-casino-price" class="price-input" placeholder="Max">
+            </div>
+
+            <div class="price-filter">
+              <span style="color: var(--text-muted); font-size: 0.85rem; min-width: 70px;">Updated:</span>
+              <input type="date" id="date-from" class="price-input" style="width: 130px;">
+              <span style="color: var(--text-muted);">-</span>
+              <input type="date" id="date-to" class="price-input" style="width: 130px;">
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Bulk Actions Bar -->
+      <div class="bulk-actions hidden" id="bulk-actions">
+        <span class="selected-count"><span id="selected-count">0</span> selected</span>
+        <button class="bulk-btn bulk-btn-refresh" id="bulk-refresh-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="23 4 23 10 17 10"/>
+            <polyline points="1 20 1 14 7 14"/>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+          </svg>
+          Refresh Selected
+        </button>
+        <button class="bulk-btn bulk-btn-clear" id="bulk-clear-btn">
+          Clear Selection
+        </button>
+      </div>
+
+      <!-- Publishers Table -->
+      <section class="results-section" style="display: block;">
+        <div class="results-card">
+          <div class="table-container">
+            <table class="publisher-table" id="publishers-table">
+              <thead>
+                <tr>
+                  <th class="checkbox-cell">
+                    <label class="select-all-label">
+                      <input type="checkbox" id="select-all">
+                    </label>
+                  </th>
+                  <th data-sort="domain">Domain <span class="sort-icon">↕</span></th>
+                  <th data-sort="guest_post_price">Guest Post <span class="sort-icon">↕</span></th>
+                  <th data-sort="link_insertion_price">Link Insert <span class="sort-icon">↕</span></th>
+                  <th data-sort="casino_price">Casino <span class="sort-icon">↕</span></th>
+                  <th>Casino OK</th>
+                  <th>Contact</th>
+                  <th>Email</th>
+                  <th data-sort="last_updated">Updated <span class="sort-icon">↕</span></th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="publishers-body">
+                <!-- Publishers will be loaded here -->
+              </tbody>
+            </table>
+          </div>
+
+          <div class="empty-state" id="empty-state" style="display: none;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+              <polyline points="14 2 14 8 20 8"/>
+            </svg>
+            <h3>No Publishers Found</h3>
+            <p>Search for domains to add them to your publisher list.</p>
+            <a href="index.html" class="btn btn-primary" style="margin-top: 1rem;">Go to Search</a>
+          </div>
+
+          <div class="pagination" id="pagination">
+            <div class="pagination-info" id="pagination-info">
+              Showing 0 of 0 publishers
+            </div>
+            <div class="pagination-btns">
+              <button id="prev-btn" class="pagination-btn" disabled>Previous</button>
+              <button id="next-btn" class="pagination-btn" disabled>Next</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    // State
+    let publishers = [];
+    let currentPage = 1;
+    let totalPublishers = 0;
+    const pageSize = 50;
+    let sortBy = 'last_updated';
+    let sortOrder = 'desc';
+    let searchTimeout = null;
+    let selectedDomains = new Set();
+
+    // Exchange rates to EUR (updated periodically - can be fetched from API)
+    // These are approximate rates - for real-time rates, use an API
+    const exchangeRatesToEUR = {
+      'USD': 0.92,    // 1 USD = 0.92 EUR
+      'GBP': 1.17,    // 1 GBP = 1.17 EUR
+      'INR': 0.011,   // 1 INR = 0.011 EUR
+      'AUD': 0.61,    // 1 AUD = 0.61 EUR
+      'CAD': 0.68,    // 1 CAD = 0.68 EUR
+      'EUR': 1.00     // 1 EUR = 1.00 EUR
+    };
+
+    // DOM Elements
+    const searchInput = document.getElementById('search-input');
+    const casinoFilter = document.getElementById('casino-filter');
+    const minGpPrice = document.getElementById('min-gp-price');
+    const maxGpPrice = document.getElementById('max-gp-price');
+    const minLiPrice = document.getElementById('min-li-price');
+    const maxLiPrice = document.getElementById('max-li-price');
+    const minCasinoPrice = document.getElementById('min-casino-price');
+    const maxCasinoPrice = document.getElementById('max-casino-price');
+    const dateFrom = document.getElementById('date-from');
+    const dateTo = document.getElementById('date-to');
+    const favoritesOnly = document.getElementById('favorites-only');
+    const clearFiltersBtn = document.getElementById('clear-filters');
+    const exportBtn = document.getElementById('export-btn');
+    const publishersBody = document.getElementById('publishers-body');
+    const emptyState = document.getElementById('empty-state');
+    const paginationInfo = document.getElementById('pagination-info');
+    const prevBtn = document.getElementById('prev-btn');
+    const nextBtn = document.getElementById('next-btn');
+    const selectAllCheckbox = document.getElementById('select-all');
+    const bulkActionsBar = document.getElementById('bulk-actions');
+    const selectedCountSpan = document.getElementById('selected-count');
+    const bulkRefreshBtn = document.getElementById('bulk-refresh-btn');
+    const bulkClearBtn = document.getElementById('bulk-clear-btn');
+    const refreshAllBtn = document.getElementById('refresh-all-btn');
+
+    // Load publishers on page load
+    document.addEventListener('DOMContentLoaded', () => {
+      loadPublishers();
+      loadStats();
+    });
+
+    // Event Listeners
+    searchInput.addEventListener('input', debounceSearch);
+    casinoFilter.addEventListener('change', () => { currentPage = 1; loadPublishers(); });
+    minGpPrice.addEventListener('change', () => { currentPage = 1; loadPublishers(); });
+    maxGpPrice.addEventListener('change', () => { currentPage = 1; loadPublishers(); });
+    minLiPrice.addEventListener('change', () => { currentPage = 1; loadPublishers(); });
+    maxLiPrice.addEventListener('change', () => { currentPage = 1; loadPublishers(); });
+    minCasinoPrice.addEventListener('change', () => { currentPage = 1; loadPublishers(); });
+    maxCasinoPrice.addEventListener('change', () => { currentPage = 1; loadPublishers(); });
+    dateFrom.addEventListener('change', () => { currentPage = 1; loadPublishers(); });
+    dateTo.addEventListener('change', () => { currentPage = 1; loadPublishers(); });
+    favoritesOnly.addEventListener('change', () => { currentPage = 1; loadPublishers(); });
+    clearFiltersBtn.addEventListener('click', clearFilters);
+    exportBtn.addEventListener('click', exportPublishers);
+    prevBtn.addEventListener('click', () => { currentPage--; loadPublishers(); });
+    nextBtn.addEventListener('click', () => { currentPage++; loadPublishers(); });
+
+    // Bulk selection event listeners
+    selectAllCheckbox.addEventListener('change', toggleSelectAll);
+    bulkRefreshBtn.addEventListener('click', refreshSelectedPublishers);
+    bulkClearBtn.addEventListener('click', clearSelection);
+    refreshAllBtn.addEventListener('click', refreshAllPublishers);
+
+    // Sort headers
+    document.querySelectorAll('th[data-sort]').forEach(th => {
+      th.addEventListener('click', () => {
+        const column = th.dataset.sort;
+        if (sortBy === column) {
+          sortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
+        } else {
+          sortBy = column;
+          sortOrder = 'desc';
+        }
+        updateSortHeaders();
+        loadPublishers();
+      });
+    });
+
+    function debounceSearch() {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(() => {
+        currentPage = 1;
+        loadPublishers();
+      }, 300);
+    }
+
+    function updateSortHeaders() {
+      document.querySelectorAll('th[data-sort]').forEach(th => {
+        th.classList.remove('sorted');
+        th.querySelector('.sort-icon').textContent = '↕';
+      });
+      const activeHeader = document.querySelector(`th[data-sort="${sortBy}"]`);
+      if (activeHeader) {
+        activeHeader.classList.add('sorted');
+        activeHeader.querySelector('.sort-icon').textContent = sortOrder === 'asc' ? '↑' : '↓';
+      }
+    }
+
+    async function loadPublishers() {
+      const params = new URLSearchParams({
+        search: searchInput.value,
+        casino: casinoFilter.value,
+        sortBy,
+        sortOrder,
+        limit: pageSize,
+        offset: (currentPage - 1) * pageSize
+      });
+
+      // Guest post price filters
+      if (minGpPrice.value) params.set('minPrice', minGpPrice.value);
+      if (maxGpPrice.value) params.set('maxPrice', maxGpPrice.value);
+      // Link insertion price filters
+      if (minLiPrice.value) params.set('minLiPrice', minLiPrice.value);
+      if (maxLiPrice.value) params.set('maxLiPrice', maxLiPrice.value);
+      // Casino price filters
+      if (minCasinoPrice.value) params.set('minCasinoPrice', minCasinoPrice.value);
+      if (maxCasinoPrice.value) params.set('maxCasinoPrice', maxCasinoPrice.value);
+      // Date filters
+      if (dateFrom.value) params.set('dateFrom', dateFrom.value);
+      if (dateTo.value) params.set('dateTo', dateTo.value);
+      // Favorites
+      if (favoritesOnly.checked) params.set('favorites', 'true');
+
+      try {
+        const response = await fetch(`/api/publishers?${params}`);
+        const data = await response.json();
+
+        publishers = data.publishers;
+        totalPublishers = data.total;
+
+        renderPublishers();
+        updatePagination();
+      } catch (error) {
+        console.error('Error loading publishers:', error);
+      }
+    }
+
+    async function loadStats() {
+      try {
+        const response = await fetch('/api/publishers/stats');
+        const stats = await response.json();
+
+        document.getElementById('stat-total').textContent = stats.total || 0;
+        document.getElementById('stat-casino').textContent = stats.casino_count || 0;
+        // Convert average to EUR (assuming USD average from DB)
+        const avgInEUR = stats.avg_guest_post
+          ? Math.round(stats.avg_guest_post * (exchangeRatesToEUR['USD'] || 0.92))
+          : 0;
+        document.getElementById('stat-avg-price').textContent = '€' + avgInEUR;
+        document.getElementById('stat-favorites').textContent = stats.favorites || 0;
+      } catch (error) {
+        console.error('Error loading stats:', error);
+      }
+    }
+
+    function renderPublishers() {
+      if (publishers.length === 0) {
+        publishersBody.innerHTML = '';
+        emptyState.style.display = 'block';
+        document.querySelector('.table-container').style.display = 'none';
+        return;
+      }
+
+      emptyState.style.display = 'none';
+      document.querySelector('.table-container').style.display = 'block';
+
+      publishersBody.innerHTML = publishers.map(p => `
+        <tr data-domain="${escapeHtml(p.domain)}">
+          <td class="checkbox-cell">
+            <input type="checkbox" class="row-checkbox"
+                   data-domain="${escapeHtml(p.domain)}"
+                   ${selectedDomains.has(p.domain) ? 'checked' : ''}
+                   onchange="toggleRowSelection('${escapeHtml(p.domain)}', this.checked)">
+          </td>
+          <td>
+            <a href="https://${escapeHtml(p.domain)}" target="_blank" class="domain-link">
+              ${escapeHtml(p.domain)}
+            </a>
+          </td>
+          <td>${formatPrice(p.guest_post_price, p.currency)}</td>
+          <td>${formatPrice(p.link_insertion_price, p.currency)}</td>
+          <td>${formatPrice(p.casino_price, p.currency)}</td>
+          <td>
+            <span class="casino-cell ${p.casino_accepted === 'yes' ? 'casino-yes' : 'casino-no'}"
+                  style="${p.casino_accepted === 'yes'
+                    ? 'background: rgba(16, 185, 129, 0.2); color: #34d399;'
+                    : 'background: rgba(239, 68, 68, 0.2); color: #f87171;'}">
+              ${p.casino_accepted || 'no'}
+            </span>
+          </td>
+          <td class="contact-cell" title="${escapeHtml(p.contact_name || '')}">
+            ${escapeHtml(p.contact_name || '-')}
+          </td>
+          <td class="contact-cell" title="${escapeHtml(p.contact_email || '')}">
+            ${escapeHtml(p.contact_email || '-')}
+          </td>
+          <td>
+            <span class="last-updated">${formatDate(p.last_updated)}</span>
+          </td>
+          <td>
+            <div class="action-btns">
+              <button class="action-btn favorite ${p.is_favorite ? 'active' : ''}"
+                      onclick="toggleFavorite('${escapeHtml(p.domain)}')"
+                      title="Toggle Favorite">
+                <svg viewBox="0 0 24 24" fill="${p.is_favorite ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2">
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                </svg>
+              </button>
+              <button class="action-btn refresh"
+                      onclick="refreshPublisher('${escapeHtml(p.domain)}')"
+                      title="Refresh Pricing">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="23 4 23 10 17 10"/>
+                  <polyline points="1 20 1 14 7 14"/>
+                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                </svg>
+              </button>
+              <button class="action-btn delete"
+                      onclick="deletePublisher('${escapeHtml(p.domain)}')"
+                      title="Delete Publisher">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="3 6 5 6 21 6"/>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                </svg>
+              </button>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function updatePagination() {
+      const start = (currentPage - 1) * pageSize + 1;
+      const end = Math.min(currentPage * pageSize, totalPublishers);
+      const totalPages = Math.ceil(totalPublishers / pageSize);
+
+      paginationInfo.textContent = totalPublishers > 0
+        ? `Showing ${start}-${end} of ${totalPublishers} publishers`
+        : 'No publishers found';
+
+      prevBtn.disabled = currentPage <= 1;
+      nextBtn.disabled = currentPage >= totalPages;
+    }
+
+    function clearFilters() {
+      searchInput.value = '';
+      casinoFilter.value = 'all';
+      minGpPrice.value = '';
+      maxGpPrice.value = '';
+      minLiPrice.value = '';
+      maxLiPrice.value = '';
+      minCasinoPrice.value = '';
+      maxCasinoPrice.value = '';
+      dateFrom.value = '';
+      dateTo.value = '';
+      favoritesOnly.checked = false;
+      currentPage = 1;
+      loadPublishers();
+    }
+
+    async function toggleFavorite(domain) {
+      try {
+        const response = await fetch(`/api/publishers/${encodeURIComponent(domain)}/favorite`, {
+          method: 'POST'
+        });
+        const data = await response.json();
+
+        // Update UI
+        const row = document.querySelector(`tr[data-domain="${domain}"]`);
+        const btn = row.querySelector('.action-btn.favorite');
+        const svg = btn.querySelector('svg');
+
+        if (data.is_favorite) {
+          btn.classList.add('active');
+          svg.setAttribute('fill', 'currentColor');
+        } else {
+          btn.classList.remove('active');
+          svg.setAttribute('fill', 'none');
+        }
+
+        loadStats();
+      } catch (error) {
+        console.error('Error toggling favorite:', error);
+      }
+    }
+
+    async function refreshPublisher(domain) {
+      const row = document.querySelector(`tr[data-domain="${domain}"]`);
+      const btn = row.querySelector('.action-btn.refresh');
+      btn.classList.add('loading');
+
+      try {
+        const response = await fetch(`/api/publishers/${encodeURIComponent(domain)}/refresh`, {
+          method: 'POST'
+        });
+        const data = await response.json();
+
+        if (data.success && data.publisher) {
+          // Update the row with new data
+          loadPublishers();
+          loadStats();
+        }
+      } catch (error) {
+        console.error('Error refreshing publisher:', error);
+        alert('Error refreshing publisher: ' + error.message);
+      } finally {
+        btn.classList.remove('loading');
+      }
+    }
+
+    async function deletePublisher(domain) {
+      if (!confirm(`Are you sure you want to delete ${domain}?`)) {
+        return;
+      }
+
+      try {
+        await fetch(`/api/publishers/${encodeURIComponent(domain)}`, {
+          method: 'DELETE'
+        });
+
+        loadPublishers();
+        loadStats();
+      } catch (error) {
+        console.error('Error deleting publisher:', error);
+        alert('Error deleting publisher: ' + error.message);
+      }
+    }
+
+    function exportPublishers() {
+      // Use the same filters as the current view
+      const params = new URLSearchParams({
+        search: searchInput.value,
+        casino: casinoFilter.value,
+        sortBy: sortBy,
+        sortOrder: sortOrder
+      });
+
+      // Guest post price filters
+      if (minGpPrice.value) params.set('minPrice', minGpPrice.value);
+      if (maxGpPrice.value) params.set('maxPrice', maxGpPrice.value);
+      // Link insertion price filters
+      if (minLiPrice.value) params.set('minLiPrice', minLiPrice.value);
+      if (maxLiPrice.value) params.set('maxLiPrice', maxLiPrice.value);
+      // Casino price filters
+      if (minCasinoPrice.value) params.set('minCasinoPrice', minCasinoPrice.value);
+      if (maxCasinoPrice.value) params.set('maxCasinoPrice', maxCasinoPrice.value);
+      // Date filters
+      if (dateFrom.value) params.set('dateFrom', dateFrom.value);
+      if (dateTo.value) params.set('dateTo', dateTo.value);
+      // Favorites filter
+      if (favoritesOnly.checked) params.set('favorites', 'true');
+
+      window.location.href = `/api/publishers/export?${params}`;
+    }
+
+    function formatPrice(price, currency) {
+      if (price === null || price === undefined) return '-';
+
+      // Convert to EUR
+      const rate = exchangeRatesToEUR[currency] || exchangeRatesToEUR['USD'] || 1;
+      const priceInEUR = Math.round(price * rate);
+
+      // Show EUR with original currency info if different
+      if (currency && currency !== 'EUR' && currency !== 'USD') {
+        const currencySymbols = { 'GBP': '£', 'INR': '₹', 'AUD': 'A$', 'CAD': 'C$' };
+        const origSymbol = currencySymbols[currency] || currency;
+        return `€${priceInEUR.toLocaleString()} <span style="font-size: 0.75rem; color: var(--text-muted);">(${origSymbol}${price})</span>`;
+      }
+
+      return '€' + priceInEUR.toLocaleString();
+    }
+
+    function formatDate(dateStr) {
+      if (!dateStr) return '-';
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      });
+    }
+
+    function escapeHtml(text) {
+      if (!text) return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Bulk Selection Functions
+    function toggleRowSelection(domain, isChecked) {
+      if (isChecked) {
+        selectedDomains.add(domain);
+      } else {
+        selectedDomains.delete(domain);
+      }
+      updateBulkActionsBar();
+      updateSelectAllCheckbox();
+    }
+
+    function toggleSelectAll() {
+      const isChecked = selectAllCheckbox.checked;
+      publishers.forEach(p => {
+        if (isChecked) {
+          selectedDomains.add(p.domain);
+        } else {
+          selectedDomains.delete(p.domain);
+        }
+      });
+      // Update checkboxes in table
+      document.querySelectorAll('.row-checkbox').forEach(cb => {
+        cb.checked = isChecked;
+      });
+      updateBulkActionsBar();
+    }
+
+    function updateSelectAllCheckbox() {
+      const checkboxes = document.querySelectorAll('.row-checkbox');
+      const checkedCount = document.querySelectorAll('.row-checkbox:checked').length;
+      selectAllCheckbox.checked = checkboxes.length > 0 && checkedCount === checkboxes.length;
+      selectAllCheckbox.indeterminate = checkedCount > 0 && checkedCount < checkboxes.length;
+    }
+
+    function updateBulkActionsBar() {
+      const count = selectedDomains.size;
+      selectedCountSpan.textContent = count;
+      if (count > 0) {
+        bulkActionsBar.classList.remove('hidden');
+      } else {
+        bulkActionsBar.classList.add('hidden');
+      }
+    }
+
+    function clearSelection() {
+      selectedDomains.clear();
+      document.querySelectorAll('.row-checkbox').forEach(cb => {
+        cb.checked = false;
+      });
+      selectAllCheckbox.checked = false;
+      selectAllCheckbox.indeterminate = false;
+      updateBulkActionsBar();
+    }
+
+    async function refreshSelectedPublishers() {
+      const domains = Array.from(selectedDomains);
+      if (domains.length === 0) return;
+
+      if (!confirm(`Refresh pricing for ${domains.length} publisher(s)? This may take a while.`)) {
+        return;
+      }
+
+      bulkRefreshBtn.disabled = true;
+      bulkRefreshBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation: spin 1s linear infinite;">
+          <polyline points="23 4 23 10 17 10"/>
+          <polyline points="1 20 1 14 7 14"/>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+        </svg>
+        Refreshing ${domains.length}...
+      `;
+
+      let completed = 0;
+      for (const domain of domains) {
+        try {
+          await fetch(`/api/publishers/${encodeURIComponent(domain)}/refresh`, {
+            method: 'POST'
+          });
+          completed++;
+          bulkRefreshBtn.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation: spin 1s linear infinite;">
+              <polyline points="23 4 23 10 17 10"/>
+              <polyline points="1 20 1 14 7 14"/>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+            </svg>
+            ${completed}/${domains.length} done...
+          `;
+        } catch (error) {
+          console.error(`Error refreshing ${domain}:`, error);
+        }
+      }
+
+      // Reset button and reload
+      bulkRefreshBtn.disabled = false;
+      bulkRefreshBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="23 4 23 10 17 10"/>
+          <polyline points="1 20 1 14 7 14"/>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+        </svg>
+        Refresh Selected
+      `;
+      clearSelection();
+      loadPublishers();
+      loadStats();
+    }
+
+    async function refreshAllPublishers() {
+      if (!confirm(`Refresh ALL ${totalPublishers} publishers? This may take a LONG time.`)) {
+        return;
+      }
+
+      refreshAllBtn.disabled = true;
+      refreshAllBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation: spin 1s linear infinite;">
+          <polyline points="23 4 23 10 17 10"/>
+          <polyline points="1 20 1 14 7 14"/>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+        </svg>
+        Refreshing...
+      `;
+
+      // Get all domains
+      const response = await fetch('/api/publishers?limit=10000');
+      const data = await response.json();
+      const allDomains = data.publishers.map(p => p.domain);
+
+      let completed = 0;
+      for (const domain of allDomains) {
+        try {
+          await fetch(`/api/publishers/${encodeURIComponent(domain)}/refresh`, {
+            method: 'POST'
+          });
+          completed++;
+          refreshAllBtn.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation: spin 1s linear infinite;">
+              <polyline points="23 4 23 10 17 10"/>
+              <polyline points="1 20 1 14 7 14"/>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+            </svg>
+            ${completed}/${allDomains.length}...
+          `;
+        } catch (error) {
+          console.error(`Error refreshing ${domain}:`, error);
+        }
+      }
+
+      // Reset button and reload
+      refreshAllBtn.disabled = false;
+      refreshAllBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="23 4 23 10 17 10"/>
+          <polyline points="1 20 1 14 7 14"/>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+        </svg>
+        Refresh All
+      `;
+      loadPublishers();
+      loadStats();
+    }
+  </script>
+</body>
+</html>

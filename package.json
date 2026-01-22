@@ -1,0 +1,24 @@
+{
+  "name": "price-scraper",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "better-sqlite3": "^12.6.0",
+    "csv-parse": "^6.1.0",
+    "express": "^5.2.1",
+    "googleapis": "^170.0.0",
+    "mammoth": "^1.11.0",
+    "openai": "^6.16.0",
+    "pdf-parse": "^1.1.1",
+    "uuid": "^13.0.0",
+    "xlsx": "^0.18.5"
+  }
+}

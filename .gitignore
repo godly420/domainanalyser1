@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Sensitive files
+credentials.json
+config.js
+
+# Database
+*.db
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temp files
+temp/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment
+.env
+.env.local

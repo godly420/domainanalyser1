@@ -1,0 +1,1252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Domain Price Searcher</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    /* ========== MOBILE HEADER ========== */
+    .mobile-header {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 60px;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+      z-index: 200;
+      padding: 0 16px;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .mobile-header .logo-text {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .hamburger-btn {
+      width: 40px;
+      height: 40px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      cursor: pointer;
+      transition: all var(--transition-base);
+    }
+
+    .hamburger-btn:hover {
+      background: var(--bg-hover);
+    }
+
+    .hamburger-btn span {
+      display: block;
+      width: 18px;
+      height: 2px;
+      background: var(--text-secondary);
+      border-radius: 1px;
+      transition: all var(--transition-base);
+    }
+
+    .hamburger-btn.active span:nth-child(1) {
+      transform: rotate(45deg) translate(4px, 4px);
+    }
+
+    .hamburger-btn.active span:nth-child(2) {
+      opacity: 0;
+    }
+
+    .hamburger-btn.active span:nth-child(3) {
+      transform: rotate(-45deg) translate(4px, -4px);
+    }
+
+    /* Mobile menu overlay */
+    .mobile-menu-overlay {
+      display: none;
+      position: fixed;
+      top: 60px;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 150;
+      opacity: 0;
+      transition: opacity var(--transition-base);
+    }
+
+    .mobile-menu-overlay.active {
+      opacity: 1;
+    }
+
+    .mobile-menu {
+      position: fixed;
+      top: 60px;
+      left: 0;
+      width: 280px;
+      height: calc(100vh - 60px);
+      background: var(--bg-surface);
+      border-right: 1px solid var(--border);
+      transform: translateX(-100%);
+      transition: transform var(--transition-slow);
+      z-index: 160;
+      padding: 16px;
+      overflow-y: auto;
+    }
+
+    .mobile-menu.active {
+      transform: translateX(0);
+    }
+
+    .mobile-nav-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 16px;
+      color: var(--text-secondary);
+      text-decoration: none;
+      border-radius: var(--radius-md);
+      margin-bottom: 4px;
+      transition: all var(--transition-base);
+      font-weight: 500;
+    }
+
+    .mobile-nav-item svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    .mobile-nav-item:hover {
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+    }
+
+    .mobile-nav-item.active {
+      background: var(--primary-bg);
+      color: var(--primary-light);
+    }
+
+    /* ========== SEARCH CARD ========== */
+    .search-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      margin-bottom: 24px;
+    }
+
+    .search-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px 24px;
+      background: var(--bg-elevated);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .search-card-header h2 {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin: 0;
+    }
+
+    .search-card-header h2 svg {
+      width: 20px;
+      height: 20px;
+      color: var(--primary);
+    }
+
+    .search-card-body {
+      padding: 24px;
+    }
+
+    /* Input Toggle */
+    .input-toggle {
+      display: flex;
+      background: var(--bg-surface);
+      border-radius: var(--radius-md);
+      padding: 4px;
+      gap: 4px;
+    }
+
+    .toggle-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border: none;
+      background: transparent;
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      font-weight: 500;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all var(--transition-base);
+    }
+
+    .toggle-btn svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .toggle-btn:hover {
+      color: var(--text-primary);
+    }
+
+    .toggle-btn.active {
+      background: var(--primary);
+      color: white;
+    }
+
+    /* Textarea */
+    .textarea-wrapper {
+      position: relative;
+    }
+
+    .search-textarea {
+      width: 100%;
+      min-height: 180px;
+      padding: 16px;
+      background: var(--bg-base);
+      border: 2px solid var(--border);
+      border-radius: var(--radius-md);
+      color: var(--text-primary);
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.95rem;
+      line-height: 1.6;
+      resize: vertical;
+      transition: all var(--transition-base);
+    }
+
+    .search-textarea:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--primary-bg);
+    }
+
+    .search-textarea::placeholder {
+      color: var(--text-muted);
+    }
+
+    .textarea-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 12px;
+      padding: 0 4px;
+    }
+
+    .domain-count {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--primary-light);
+    }
+
+    .hint {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    /* File Dropzone */
+    .file-dropzone {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 180px;
+      border: 2px dashed var(--border);
+      border-radius: var(--radius-md);
+      background: var(--bg-base);
+      cursor: pointer;
+      transition: all var(--transition-base);
+      padding: 32px;
+    }
+
+    .file-dropzone:hover,
+    .file-dropzone.dragover {
+      border-color: var(--primary);
+      background: var(--primary-bg);
+    }
+
+    .dropzone-icon {
+      width: 64px;
+      height: 64px;
+      margin-bottom: 16px;
+      background: var(--bg-elevated);
+      border-radius: var(--radius-lg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .dropzone-icon svg {
+      width: 28px;
+      height: 28px;
+      color: var(--primary);
+    }
+
+    .dropzone-text {
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+      text-align: center;
+    }
+
+    .browse-link {
+      color: var(--primary);
+      font-weight: 600;
+      text-decoration: underline;
+    }
+
+    .dropzone-hint {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    /* File Selected */
+    .file-selected {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 20px;
+      background: var(--success-bg);
+      border: 1px solid var(--success);
+      border-radius: var(--radius-md);
+    }
+
+    .file-selected svg {
+      width: 24px;
+      height: 24px;
+      color: var(--success);
+    }
+
+    .file-name {
+      flex: 1;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .file-remove {
+      width: 32px;
+      height: 32px;
+      background: transparent;
+      border: none;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      transition: all var(--transition-base);
+    }
+
+    .file-remove:hover {
+      background: var(--danger-bg);
+      color: var(--danger);
+    }
+
+    .file-remove svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    /* Search Actions */
+    .search-actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px 24px;
+      background: var(--bg-elevated);
+      border-top: 1px solid var(--border);
+    }
+
+    .btn-clear {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 18px;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      border-radius: var(--radius-md);
+      font-size: 0.9rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all var(--transition-base);
+    }
+
+    .btn-clear:hover {
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+      border-color: var(--border-light);
+    }
+
+    .btn-clear svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .btn-search {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 24px;
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      color: white;
+      border: none;
+      border-radius: var(--radius-md);
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all var(--transition-base);
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    }
+
+    .btn-search:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+    }
+
+    .btn-search:active:not(:disabled) {
+      transform: translateY(0);
+    }
+
+    .btn-search:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .btn-search svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    /* ========== HISTORY SECTION ========== */
+    .history-section {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+
+    .history-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px 24px;
+      background: var(--bg-elevated);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .history-header h2 {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin: 0;
+    }
+
+    .history-header h2 svg {
+      width: 20px;
+      height: 20px;
+      color: var(--text-muted);
+    }
+
+    .view-all-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--primary);
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 500;
+      transition: all var(--transition-base);
+    }
+
+    .view-all-link:hover {
+      color: var(--primary-light);
+    }
+
+    .view-all-link svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .history-list {
+      max-height: 450px;
+      overflow-y: auto;
+    }
+
+    .history-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+      transition: background var(--transition-fast);
+      gap: 16px;
+    }
+
+    .history-item:last-child {
+      border-bottom: none;
+    }
+
+    .history-item:hover {
+      background: var(--bg-elevated);
+    }
+
+    .history-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .history-name {
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .history-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    /* Progress bar in history */
+    .history-progress {
+      width: 120px;
+      height: 8px;
+      background: var(--bg-base);
+      border-radius: var(--radius-full);
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .history-progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--primary), var(--primary-light));
+      border-radius: var(--radius-full);
+      transition: width 0.3s ease;
+    }
+
+    .history-progress-fill.completed {
+      background: linear-gradient(90deg, var(--success), var(--success-light));
+    }
+
+    /* Status Badge */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: var(--radius-full);
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      flex-shrink: 0;
+    }
+
+    .status-badge .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .status-badge.pending {
+      background: rgba(100, 116, 139, 0.15);
+      color: #94a3b8;
+    }
+
+    .status-badge.running {
+      background: rgba(59, 130, 246, 0.15);
+      color: #3b82f6;
+    }
+
+    .status-badge.running .dot {
+      animation: pulse-dot 1.5s ease-in-out infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.8); }
+    }
+
+    .status-badge.paused {
+      background: rgba(245, 158, 11, 0.15);
+      color: #f59e0b;
+    }
+
+    .status-badge.completed {
+      background: rgba(34, 197, 94, 0.15);
+      color: #22c55e;
+    }
+
+    .status-badge.cancelled {
+      background: rgba(239, 68, 68, 0.15);
+      color: #ef4444;
+    }
+
+    .status-badge.queued {
+      background: rgba(168, 85, 247, 0.15);
+      color: #a855f7;
+    }
+
+    .btn-view {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      border-radius: var(--radius-md);
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all var(--transition-base);
+      text-decoration: none;
+      flex-shrink: 0;
+    }
+
+    .btn-view:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+      border-color: var(--border-light);
+    }
+
+    .btn-view svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    /* Empty State */
+    .empty-state {
+      text-align: center;
+      padding: 60px 32px;
+    }
+
+    .empty-state-icon {
+      width: 72px;
+      height: 72px;
+      margin: 0 auto 20px;
+      background: linear-gradient(135deg, var(--primary-bg), rgba(99, 102, 241, 0.2));
+      border-radius: var(--radius-lg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .empty-state-icon svg {
+      width: 36px;
+      height: 36px;
+      color: var(--primary);
+    }
+
+    .empty-state h3 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+    }
+
+    .empty-state p {
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+    }
+
+    /* Spinner */
+    .spinner {
+      width: 18px;
+      height: 18px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      display: inline-block;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* ========== RESPONSIVE ========== */
+    @media (max-width: 768px) {
+      .mobile-header {
+        display: flex;
+      }
+
+      .sidebar {
+        display: none;
+      }
+
+      .main-content {
+        margin-left: 0;
+        margin-top: 60px;
+        max-width: 100%;
+        padding: 20px 16px;
+      }
+
+      .top-header {
+        flex-direction: column;
+        gap: 8px;
+        margin-bottom: 24px;
+      }
+
+      .search-card-header {
+        flex-direction: column;
+        gap: 16px;
+        align-items: flex-start;
+      }
+
+      .search-card-body {
+        padding: 16px;
+      }
+
+      .search-actions {
+        flex-direction: column;
+        gap: 12px;
+        padding: 16px;
+      }
+
+      .search-actions .btn-clear,
+      .search-actions .btn-search {
+        width: 100%;
+        justify-content: center;
+      }
+
+      .history-header {
+        padding: 16px;
+      }
+
+      .history-item {
+        flex-wrap: wrap;
+        padding: 16px;
+        gap: 12px;
+      }
+
+      .history-info {
+        width: 100%;
+      }
+
+      .history-progress {
+        width: 100%;
+        order: 4;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Mobile Header -->
+  <header class="mobile-header">
+    <span class="logo-text">PriceSearch</span>
+    <button class="hamburger-btn" id="hamburger-btn">
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
+  </header>
+
+  <!-- Mobile Menu Overlay -->
+  <div class="mobile-menu-overlay" id="mobile-overlay"></div>
+
+  <!-- Mobile Menu -->
+  <nav class="mobile-menu" id="mobile-menu">
+    <a href="index.html" class="mobile-nav-item active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="8"/>
+        <path d="m21 21-4.35-4.35"/>
+      </svg>
+      Search
+    </a>
+    <a href="tasks.html" class="mobile-nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M9 11l3 3L22 4"/>
+        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+      </svg>
+      Tasks
+    </a>
+    <a href="publishers.html" class="mobile-nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+        <polyline points="14 2 14 8 20 8"/>
+      </svg>
+      Publishers
+    </a>
+  </nav>
+
+  <div class="app-container">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="logo">
+        <div class="logo-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/>
+            <path d="m21 21-4.35-4.35"/>
+          </svg>
+        </div>
+        <span class="logo-text">PriceSearch</span>
+      </div>
+
+      <nav class="nav-menu">
+        <a href="index.html" class="nav-item active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/>
+            <path d="m21 21-4.35-4.35"/>
+          </svg>
+          Search
+        </a>
+        <a href="tasks.html" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 11l3 3L22 4"/>
+            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+          </svg>
+          Tasks
+        </a>
+        <a href="publishers.html" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+            <polyline points="14 2 14 8 20 8"/>
+          </svg>
+          Publishers
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="email-accounts">
+          <div class="account-badge">4 Email Accounts</div>
+          <span class="status-dot"></span>
+          <span class="status-text">Connected</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Header -->
+      <header class="top-header">
+        <div class="header-left">
+          <h1>Domain Price Search</h1>
+          <p class="header-subtitle">Find publisher pricing from your email communications</p>
+        </div>
+      </header>
+
+      <!-- Search Card -->
+      <div class="search-card">
+        <div class="search-card-header">
+          <h2>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/>
+              <path d="m21 21-4.35-4.35"/>
+            </svg>
+            Search Domains
+          </h2>
+          <div class="input-toggle">
+            <button class="toggle-btn active" data-mode="text">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="17" y1="10" x2="3" y2="10"/>
+                <line x1="21" y1="6" x2="3" y2="6"/>
+                <line x1="21" y1="14" x2="3" y2="14"/>
+                <line x1="17" y1="18" x2="3" y2="18"/>
+              </svg>
+              Text
+            </button>
+            <button class="toggle-btn" data-mode="file">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+              </svg>
+              CSV
+            </button>
+          </div>
+        </div>
+
+        <div class="search-card-body">
+          <!-- Text Input Mode -->
+          <div class="input-mode" id="text-mode">
+            <div class="textarea-wrapper">
+              <textarea class="search-textarea" id="domains" placeholder="Enter domains to search, one per line...
+
+example.com
+techcrunch.com
+forbes.com"></textarea>
+              <div class="textarea-footer">
+                <span class="domain-count" id="domain-count">0 domains</span>
+                <span class="hint">Press Ctrl+Enter to search</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- File Input Mode -->
+          <div class="input-mode" id="file-mode" style="display: none;">
+            <div class="file-dropzone" id="file-dropzone">
+              <input type="file" id="csv-file" accept=".csv,.txt" hidden>
+              <div class="dropzone-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="17 8 12 3 7 8"/>
+                  <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+              </div>
+              <p class="dropzone-text">Drop your CSV file here or <span class="browse-link">browse</span></p>
+              <p class="dropzone-hint">Domains should be in the first column</p>
+            </div>
+            <div class="file-selected" id="file-selected" style="display: none;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+              </svg>
+              <span class="file-name" id="file-name">file.csv</span>
+              <button class="file-remove" id="file-remove">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="18" y1="6" x2="6" y2="18"/>
+                  <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="search-actions">
+          <button class="btn-clear" id="clear-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            </svg>
+            Clear
+          </button>
+          <button class="btn-search" id="search-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/>
+              <path d="m21 21-4.35-4.35"/>
+            </svg>
+            Search Domains
+          </button>
+        </div>
+      </div>
+
+      <!-- Task History -->
+      <div class="history-section">
+        <div class="history-header">
+          <h2>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+            Recent Tasks
+          </h2>
+          <a href="tasks.html" class="view-all-link">
+            View All
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
+          </a>
+        </div>
+        <div class="history-list" id="history-list">
+          <!-- Tasks will be loaded here -->
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    // Mobile menu toggle
+    const hamburgerBtn = document.getElementById('hamburger-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const mobileOverlay = document.getElementById('mobile-overlay');
+
+    hamburgerBtn.addEventListener('click', () => {
+      hamburgerBtn.classList.toggle('active');
+      mobileMenu.classList.toggle('active');
+      mobileOverlay.classList.toggle('active');
+    });
+
+    mobileOverlay.addEventListener('click', () => {
+      hamburgerBtn.classList.remove('active');
+      mobileMenu.classList.remove('active');
+      mobileOverlay.classList.remove('active');
+    });
+
+    // Load task history on page load
+    document.addEventListener('DOMContentLoaded', loadTaskHistory);
+
+    async function loadTaskHistory() {
+      const historyList = document.getElementById('history-list');
+
+      try {
+        const response = await fetch('/api/tasks?limit=10');
+        const data = await response.json();
+
+        if (data.tasks.length === 0) {
+          historyList.innerHTML = `
+            <div class="empty-state">
+              <div class="empty-state-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <polyline points="12 6 12 12 16 14"/>
+                </svg>
+              </div>
+              <h3>No tasks yet</h3>
+              <p>Enter domains above and click Search to create your first task</p>
+            </div>
+          `;
+          return;
+        }
+
+        historyList.innerHTML = data.tasks.map(task => {
+          const progress = task.total_domains > 0 ? Math.round((task.completed_domains / task.total_domains) * 100) : 0;
+          const isComplete = task.status === 'completed' || task.status === 'cancelled';
+
+          return `
+            <div class="history-item">
+              <div class="history-info">
+                <div class="history-name">${escapeHtml(task.name)}</div>
+                <div class="history-meta">
+                  <span>${task.total_domains} domains</span>
+                  <span>${task.successful_domains} found</span>
+                  <span>${formatDate(task.created_at)}</span>
+                </div>
+              </div>
+              <div class="history-progress">
+                <div class="history-progress-fill ${isComplete ? 'completed' : ''}" style="width: ${progress}%"></div>
+              </div>
+              <span class="status-badge ${task.status}">
+                <span class="dot"></span>
+                ${capitalizeFirst(task.status)}
+              </span>
+              <a href="tasks.html?view=${task.id}" class="btn-view">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                  <circle cx="12" cy="12" r="3"/>
+                </svg>
+                View
+              </a>
+            </div>
+          `;
+        }).join('');
+      } catch (error) {
+        console.error('Error loading task history:', error);
+        historyList.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+              </svg>
+            </div>
+            <h3>Error loading tasks</h3>
+            <p>Something went wrong. Please try again.</p>
+          </div>
+        `;
+      }
+    }
+
+    // Toggle between text and file input modes
+    document.querySelectorAll('.toggle-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        const mode = btn.dataset.mode;
+        document.getElementById('text-mode').style.display = mode === 'text' ? 'block' : 'none';
+        document.getElementById('file-mode').style.display = mode === 'file' ? 'block' : 'none';
+      });
+    });
+
+    // Domain count
+    const domainsTextarea = document.getElementById('domains');
+    const domainCountEl = document.getElementById('domain-count');
+
+    domainsTextarea.addEventListener('input', updateDomainCount);
+
+    function updateDomainCount() {
+      const domains = getDomains();
+      domainCountEl.textContent = `${domains.length} domain${domains.length !== 1 ? 's' : ''}`;
+    }
+
+    function getDomains() {
+      return domainsTextarea.value.split(/[\n,]/).map(d => d.trim()).filter(d => d.length > 0 && d.includes('.'));
+    }
+
+    // File dropzone
+    const dropzone = document.getElementById('file-dropzone');
+    const fileInput = document.getElementById('csv-file');
+    const fileSelected = document.getElementById('file-selected');
+    const fileName = document.getElementById('file-name');
+    const fileRemove = document.getElementById('file-remove');
+
+    dropzone.addEventListener('click', () => fileInput.click());
+    dropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropzone.classList.add('dragover');
+    });
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('dragover');
+      if (e.dataTransfer.files.length) {
+        handleFile(e.dataTransfer.files[0]);
+      }
+    });
+
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files.length) {
+        handleFile(fileInput.files[0]);
+      }
+    });
+
+    fileRemove.addEventListener('click', (e) => {
+      e.stopPropagation();
+      fileInput.value = '';
+      dropzone.style.display = 'flex';
+      fileSelected.style.display = 'none';
+    });
+
+    function handleFile(file) {
+      fileName.textContent = file.name;
+      dropzone.style.display = 'none';
+      fileSelected.style.display = 'flex';
+
+      // Read file and populate textarea
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const content = e.target.result;
+        const lines = content.split(/[\n\r]+/).filter(line => line.trim());
+        const domains = lines.map(line => {
+          const firstCol = line.split(',')[0].trim().replace(/["']/g, '');
+          return firstCol;
+        }).filter(d => d.includes('.'));
+
+        domainsTextarea.value = domains.join('\n');
+        updateDomainCount();
+
+        // Switch to text mode to show the domains
+        document.querySelector('[data-mode="text"]').click();
+      };
+      reader.readAsText(file);
+    }
+
+    // Clear button
+    document.getElementById('clear-btn').addEventListener('click', () => {
+      domainsTextarea.value = '';
+      updateDomainCount();
+      fileInput.value = '';
+      dropzone.style.display = 'flex';
+      fileSelected.style.display = 'none';
+    });
+
+    // Search button - creates a task
+    document.getElementById('search-btn').addEventListener('click', createAndStartTask);
+
+    // Ctrl+Enter to search
+    domainsTextarea.addEventListener('keydown', (e) => {
+      if (e.ctrlKey && e.key === 'Enter') {
+        createAndStartTask();
+      }
+    });
+
+    async function createAndStartTask() {
+      const domains = getDomains();
+
+      if (domains.length === 0) {
+        alert('Please enter at least one valid domain');
+        return;
+      }
+
+      const searchBtn = document.getElementById('search-btn');
+      searchBtn.disabled = true;
+      searchBtn.innerHTML = `
+        <div class="spinner"></div>
+        Creating task...
+      `;
+
+      try {
+        // Create the task
+        const response = await fetch('/api/tasks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ domains })
+        });
+
+        const data = await response.json();
+
+        if (!data.success) {
+          alert(data.error || 'Failed to create task');
+          return;
+        }
+
+        // Start the task
+        await fetch(`/api/tasks/${data.task.id}/start`, { method: 'POST' });
+
+        // Clear the input
+        domainsTextarea.value = '';
+        updateDomainCount();
+
+        // Redirect to tasks page to see progress
+        window.location.href = `tasks.html?view=${data.task.id}`;
+
+      } catch (error) {
+        console.error('Error creating task:', error);
+        alert('Failed to create task');
+      } finally {
+        searchBtn.disabled = false;
+        searchBtn.innerHTML = `
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/>
+            <path d="m21 21-4.35-4.35"/>
+          </svg>
+          Search Domains
+        `;
+      }
+    }
+
+    // Utilities
+    function escapeHtml(text) {
+      if (!text) return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function capitalizeFirst(str) {
+      return str.charAt(0).toUpperCase() + str.slice(1);
+    }
+
+    function formatDate(dateStr) {
+      if (!dateStr) return '';
+      const date = new Date(dateStr);
+      const now = new Date();
+      const diff = now - date;
+
+      if (diff < 60000) return 'just now';
+      if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+      if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+
+      return date.toLocaleDateString();
+    }
+  </script>
+</body>
+</html>
