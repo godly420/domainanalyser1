@@ -1,20 +1,33 @@
 const { google } = require('googleapis');
 const path = require('path');
+const fs = require('fs');
 
 /**
  * Creates and returns a GoogleAuth instance for Gmail API access
+ * Supports credentials from environment variable (base64 encoded) or file
  * @param {string} email - The email address to impersonate using domain-wide delegation
  * @returns {GoogleAuth} Configured GoogleAuth instance
  */
 function getAuth(email) {
-  const auth = new google.auth.GoogleAuth({
-    keyFile: path.join(__dirname, '../credentials.json'),
+  let authConfig = {
     scopes: ['https://www.googleapis.com/auth/gmail.readonly'],
     clientOptions: {
       subject: email
     }
-  });
+  };
 
+  // Check for credentials in environment variable (base64 encoded JSON)
+  if (process.env.GOOGLE_CREDENTIALS) {
+    const credentials = JSON.parse(
+      Buffer.from(process.env.GOOGLE_CREDENTIALS, 'base64').toString('utf-8')
+    );
+    authConfig.credentials = credentials;
+  } else {
+    // Fall back to file
+    authConfig.keyFile = path.join(__dirname, '../credentials.json');
+  }
+
+  const auth = new google.auth.GoogleAuth(authConfig);
   return auth;
 }
 

@@ -6,7 +6,10 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 
-const DB_PATH = path.join(__dirname, 'price-scraper.db');
+// Use /data mount in production (Fly.io), local path otherwise
+const DB_PATH = process.env.NODE_ENV === 'production'
+  ? '/data/price-scraper.db'
+  : path.join(__dirname, 'price-scraper.db');
 
 let db;
 
