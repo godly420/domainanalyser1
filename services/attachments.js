@@ -149,13 +149,32 @@ async function parseGoogleSheet(sheetUrl, authEmail) {
     const sheetId = sheetIdMatch[1];
 
     // Load service account credentials
-    const credentialsPath = './credentials.json';
+    // First try environment variable (for Render deployment), then fall back to file
     let credentials;
-    try {
-      const credentialsFile = await fs.readFile(credentialsPath, 'utf8');
-      credentials = JSON.parse(credentialsFile);
-    } catch (fileError) {
-      throw new Error(`Failed to load credentials.json: ${fileError.message}`);
+    if (process.env.GOOGLE_CREDENTIALS) {
+      try {
+        // Try parsing as JSON directly first
+        credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+        console.log('Loaded Google credentials from GOOGLE_CREDENTIALS environment variable');
+      } catch (parseError) {
+        // Try base64 decoding if direct parse fails
+        try {
+          const decoded = Buffer.from(process.env.GOOGLE_CREDENTIALS, 'base64').toString('utf8');
+          credentials = JSON.parse(decoded);
+          console.log('Loaded Google credentials from GOOGLE_CREDENTIALS (base64)');
+        } catch (decodeError) {
+          throw new Error('Failed to parse GOOGLE_CREDENTIALS environment variable');
+        }
+      }
+    } else {
+      // Fall back to credentials.json file
+      const credentialsPath = './credentials.json';
+      try {
+        const credentialsFile = await fs.readFile(credentialsPath, 'utf8');
+        credentials = JSON.parse(credentialsFile);
+      } catch (fileError) {
+        throw new Error(`Failed to load credentials.json: ${fileError.message}. Set GOOGLE_CREDENTIALS env var for production.`);
+      }
     }
 
     // Try direct service account access first (for public sheets)
