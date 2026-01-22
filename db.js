@@ -15,9 +15,14 @@ let pool;
  */
 async function init() {
   try {
+    // Configure SSL for Supabase/production
+    const sslConfig = DATABASE_URL.includes('supabase') || process.env.NODE_ENV === 'production'
+      ? { rejectUnauthorized: false }
+      : false;
+
     pool = new Pool({
       connectionString: DATABASE_URL,
-      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+      ssl: sslConfig
     });
 
     // Test connection
