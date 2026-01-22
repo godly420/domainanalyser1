@@ -276,6 +276,17 @@
       text-decoration: underline;
     }
 
+    .task-tag {
+      display: inline-block;
+      padding: 2px 8px;
+      font-size: 11px;
+      font-weight: 500;
+      background: rgba(99, 102, 241, 0.15);
+      color: #818cf8;
+      border-radius: 4px;
+      white-space: nowrap;
+    }
+
     .action-btns {
       display: flex;
       gap: 0.5rem;
@@ -894,9 +905,12 @@
                    onchange="toggleRowSelection('${escapeHtml(p.domain)}', this.checked)">
           </td>
           <td>
-            <a href="https://${escapeHtml(p.domain)}" target="_blank" class="domain-link">
-              ${escapeHtml(p.domain)}
-            </a>
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <a href="https://${escapeHtml(p.domain)}" target="_blank" class="domain-link">
+                ${escapeHtml(p.domain)}
+              </a>
+              ${p.task_name ? `<span class="task-tag">${escapeHtml(p.task_name)}</span>` : ''}
+            </div>
           </td>
           <td>${formatPrice(p.guest_post_price, p.currency)}</td>
           <td>${formatPrice(p.link_insertion_price, p.currency)}</td>

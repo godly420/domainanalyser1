@@ -453,77 +453,81 @@ function savePublisher(result, taskId = null) {
  * @returns {Array} Publishers array
  */
 function getPublishers(options = {}) {
-  let query = 'SELECT * FROM publishers WHERE 1=1';
+  let query = `
+    SELECT p.*, t.name as task_name
+    FROM publishers p
+    LEFT JOIN tasks t ON p.last_task_id = t.id
+    WHERE 1=1`;
   const params = [];
 
   // Search filter
   if (options.search) {
-    query += ' AND (domain LIKE ? OR contact_email LIKE ? OR contact_name LIKE ?)';
+    query += ' AND (p.domain LIKE ? OR p.contact_email LIKE ? OR p.contact_name LIKE ?)';
     const searchTerm = `%${options.search}%`;
     params.push(searchTerm, searchTerm, searchTerm);
   }
 
   // Casino accepted filter
   if (options.casinoAccepted !== undefined && options.casinoAccepted !== 'all') {
-    query += ' AND casino_accepted = ?';
+    query += ' AND p.casino_accepted = ?';
     params.push(options.casinoAccepted);
   }
 
   // Guest post price range filters
   if (options.minPrice) {
-    query += ' AND guest_post_price >= ?';
+    query += ' AND p.guest_post_price >= ?';
     params.push(options.minPrice);
   }
   if (options.maxPrice) {
-    query += ' AND guest_post_price <= ?';
+    query += ' AND p.guest_post_price <= ?';
     params.push(options.maxPrice);
   }
 
   // Link insertion price range filters
   if (options.minLiPrice) {
-    query += ' AND link_insertion_price >= ?';
+    query += ' AND p.link_insertion_price >= ?';
     params.push(options.minLiPrice);
   }
   if (options.maxLiPrice) {
-    query += ' AND link_insertion_price <= ?';
+    query += ' AND p.link_insertion_price <= ?';
     params.push(options.maxLiPrice);
   }
 
   // Casino price range filters
   if (options.minCasinoPrice) {
-    query += ' AND casino_price >= ?';
+    query += ' AND p.casino_price >= ?';
     params.push(options.minCasinoPrice);
   }
   if (options.maxCasinoPrice) {
-    query += ' AND casino_price <= ?';
+    query += ' AND p.casino_price <= ?';
     params.push(options.maxCasinoPrice);
   }
 
   // Date range filters
   if (options.dateFrom) {
-    query += ' AND last_updated >= ?';
+    query += ' AND p.last_updated >= ?';
     params.push(options.dateFrom);
   }
   if (options.dateTo) {
-    query += ' AND last_updated <= ?';
+    query += ' AND p.last_updated <= ?';
     params.push(options.dateTo + ' 23:59:59');
   }
 
   // Favorites filter
   if (options.favoritesOnly) {
-    query += ' AND is_favorite = 1';
+    query += ' AND p.is_favorite = 1';
   }
 
   // Has price filter (for filtering publishers with/without pricing)
   if (options.hasPrice === 'yes') {
-    query += ' AND (guest_post_price IS NOT NULL OR link_insertion_price IS NOT NULL OR casino_price IS NOT NULL)';
+    query += ' AND (p.guest_post_price IS NOT NULL OR p.link_insertion_price IS NOT NULL OR p.casino_price IS NOT NULL)';
   } else if (options.hasPrice === 'no') {
-    query += ' AND guest_post_price IS NULL AND link_insertion_price IS NULL AND casino_price IS NULL';
+    query += ' AND p.guest_post_price IS NULL AND p.link_insertion_price IS NULL AND p.casino_price IS NULL';
   }
 
   // Task filter (filter by which task found this publisher)
   if (options.taskId) {
-    query += ' AND last_task_id = ?';
+    query += ' AND p.last_task_id = ?';
     params.push(options.taskId);
   }
 
@@ -532,9 +536,9 @@ function getPublishers(options = {}) {
   const sortOrder = options.sortOrder === 'asc' ? 'ASC' : 'DESC';
   const validColumns = ['domain', 'guest_post_price', 'casino_price', 'last_updated', 'first_found', 'search_count'];
   if (validColumns.includes(sortColumn)) {
-    query += ` ORDER BY ${sortColumn} ${sortOrder}`;
+    query += ` ORDER BY p.${sortColumn} ${sortOrder}`;
   } else {
-    query += ' ORDER BY last_updated DESC';
+    query += ' ORDER BY p.last_updated DESC';
   }
 
   // Pagination
