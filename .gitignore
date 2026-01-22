@@ -3,7 +3,6 @@ node_modules/
 
 # Sensitive files
 credentials.json
-config.js
 
 # Database
 *.db
