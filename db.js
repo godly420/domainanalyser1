@@ -6,10 +6,11 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 
-// Use /data mount in production (Fly.io), local path otherwise
-const DB_PATH = process.env.NODE_ENV === 'production'
-  ? '/data/price-scraper.db'
-  : path.join(__dirname, 'price-scraper.db');
+// Use /data mount if available, otherwise use local path
+const DB_PATH = process.env.DATABASE_PATH ||
+  (process.env.NODE_ENV === 'production' && require('fs').existsSync('/data')
+    ? '/data/price-scraper.db'
+    : path.join(__dirname, 'price-scraper.db'));
 
 let db;
 
@@ -117,6 +118,28 @@ function init() {
       )
     `);
 
+    // Users table for authentication
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        last_login TEXT
+      )
+    `);
+
+    // Sessions table for login sessions
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS sessions (
+        id TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        expires_at TEXT NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `);
+
     // Indexes
     db.exec(`
       CREATE INDEX IF NOT EXISTS idx_results_session ON search_results(session_id);
@@ -126,6 +149,7 @@ function init() {
       CREATE INDEX IF NOT EXISTS idx_task_domains_task ON task_domains(task_id);
       CREATE INDEX IF NOT EXISTS idx_task_domains_status ON task_domains(status);
       CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+      CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
     `);
 
     console.log('Database initialized:', DB_PATH);
@@ -913,6 +937,102 @@ function exportTaskToCsv(taskId) {
   return [headers.join(','), ...rows].join('\n');
 }
 
+// ============================================
+// USER/AUTH FUNCTIONS
+// ============================================
+
+/**
+ * Create a new user
+ * @param {string} username - Username
+ * @param {string} passwordHash - Hashed password
+ * @returns {Object} Created user
+ */
+function createUser(username, passwordHash) {
+  const stmt = db.prepare(`
+    INSERT INTO users (username, password_hash)
+    VALUES (?, ?)
+  `);
+  const result = stmt.run(username, passwordHash);
+  return { id: result.lastInsertRowid, username };
+}
+
+/**
+ * Get user by username
+ * @param {string} username - Username
+ * @returns {Object|null} User data
+ */
+function getUserByUsername(username) {
+  return db.prepare('SELECT * FROM users WHERE username = ?').get(username);
+}
+
+/**
+ * Get user by ID
+ * @param {number} userId - User ID
+ * @returns {Object|null} User data
+ */
+function getUserById(userId) {
+  return db.prepare('SELECT id, username, created_at, last_login FROM users WHERE id = ?').get(userId);
+}
+
+/**
+ * Update user's last login time
+ * @param {number} userId - User ID
+ */
+function updateLastLogin(userId) {
+  db.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?').run(userId);
+}
+
+/**
+ * Create a session
+ * @param {string} sessionId - Session ID (UUID)
+ * @param {number} userId - User ID
+ * @param {number} expiresInHours - Hours until expiration (default 24)
+ */
+function createAuthSession(sessionId, userId, expiresInHours = 24) {
+  const expiresAt = new Date(Date.now() + expiresInHours * 60 * 60 * 1000).toISOString();
+  db.prepare(`
+    INSERT INTO sessions (id, user_id, expires_at)
+    VALUES (?, ?, ?)
+  `).run(sessionId, userId, expiresAt);
+}
+
+/**
+ * Get session with user data
+ * @param {string} sessionId - Session ID
+ * @returns {Object|null} Session with user data
+ */
+function getAuthSession(sessionId) {
+  return db.prepare(`
+    SELECT s.*, u.username
+    FROM sessions s
+    JOIN users u ON s.user_id = u.id
+    WHERE s.id = ? AND s.expires_at > datetime('now')
+  `).get(sessionId);
+}
+
+/**
+ * Delete a session (logout)
+ * @param {string} sessionId - Session ID
+ */
+function deleteAuthSession(sessionId) {
+  db.prepare('DELETE FROM sessions WHERE id = ?').run(sessionId);
+}
+
+/**
+ * Clean up expired sessions
+ */
+function cleanupExpiredSessions() {
+  db.prepare("DELETE FROM sessions WHERE expires_at < datetime('now')").run();
+}
+
+/**
+ * Get user count
+ * @returns {number} Number of users
+ */
+function getUserCount() {
+  return db.prepare('SELECT COUNT(*) as count FROM users').get().count;
+}
+
 module.exports = {
   init,
   createSession,
@@ -944,5 +1064,15 @@ module.exports = {
   skipRemainingDomains,
   deleteTask,
   getTaskCount,
-  exportTaskToCsv
+  exportTaskToCsv,
+  // User/Auth functions
+  createUser,
+  getUserByUsername,
+  getUserById,
+  updateLastLogin,
+  createAuthSession,
+  getAuthSession,
+  deleteAuthSession,
+  cleanupExpiredSessions,
+  getUserCount
 };

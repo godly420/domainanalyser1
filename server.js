@@ -5,6 +5,9 @@
 
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
+const cookieParser = require('cookie-parser');
+const bcrypt = require('bcryptjs');
+const path = require('path');
 const db = require('./db');
 const { searchDomains, searchDomain } = require('./services/domain-searcher');
 const config = require('./config');
@@ -14,7 +17,140 @@ const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(express.json());
+app.use(cookieParser());
+
+// ============================================
+// AUTHENTICATION MIDDLEWARE & ROUTES
+// ============================================
+
+// Public paths that don't require auth
+const publicPaths = ['/login.html', '/api/auth/login', '/api/auth/setup-required'];
+
+// Auth middleware
+function requireAuth(req, res, next) {
+  // Allow public paths
+  if (publicPaths.some(p => req.path === p || req.path.startsWith('/api/auth/'))) {
+    return next();
+  }
+
+  // Check for session cookie
+  const sessionId = req.cookies.session;
+  if (!sessionId) {
+    // For API requests, return 401
+    if (req.path.startsWith('/api/')) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    // For page requests, redirect to login
+    return res.redirect('/login.html');
+  }
+
+  // Validate session
+  const session = db.getAuthSession(sessionId);
+  if (!session) {
+    res.clearCookie('session');
+    if (req.path.startsWith('/api/')) {
+      return res.status(401).json({ error: 'Session expired' });
+    }
+    return res.redirect('/login.html');
+  }
+
+  // Attach user info to request
+  req.user = { id: session.user_id, username: session.username };
+  next();
+}
+
+// Apply auth middleware before static files
+app.use(requireAuth);
+
+// Serve static files (after auth check)
 app.use(express.static('public'));
+
+// Default admin credentials from environment or fallback
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+
+// Create default admin user on startup if not exists (called after db.init)
+async function ensureAdminUser() {
+  const existingAdmin = db.getUserByUsername(ADMIN_USERNAME);
+  if (!existingAdmin) {
+    const passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 10);
+    db.createUser(ADMIN_USERNAME, passwordHash);
+    console.log(`Created admin user: ${ADMIN_USERNAME}`);
+  }
+}
+
+// Check if setup is required (no users exist) - always false now since we have predefined admin
+app.get('/api/auth/setup-required', (req, res) => {
+  res.json({ setupRequired: false });
+});
+
+// Login with predefined admin credentials
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username and password required' });
+    }
+
+    // Find user
+    const user = db.getUserByUsername(username);
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const validPassword = await bcrypt.compare(password, user.password_hash);
+    if (!validPassword) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    // Create session - long expiry (30 days) but cookie is session-based
+    const sessionId = uuidv4();
+    db.createAuthSession(sessionId, user.id, 24 * 30); // 30 days in DB
+    db.updateLastLogin(user.id);
+
+    // Set session cookie (no maxAge = expires when browser closes)
+    res.cookie('session', sessionId, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax'
+      // No maxAge = session cookie, expires when browser closes
+    });
+
+    res.json({ success: true, username: user.username });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+// Logout
+app.post('/api/auth/logout', (req, res) => {
+  const sessionId = req.cookies.session;
+  if (sessionId) {
+    db.deleteAuthSession(sessionId);
+    res.clearCookie('session');
+  }
+  res.json({ success: true });
+});
+
+// Get current user
+app.get('/api/auth/me', (req, res) => {
+  if (req.user) {
+    res.json({ user: req.user });
+  } else {
+    res.status(401).json({ error: 'Not authenticated' });
+  }
+});
+
+// Redirect root to index.html (handled after auth)
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// ============================================
+// END AUTHENTICATION
+// ============================================
 
 // Store active SSE connections by session ID
 const sseConnections = new Map();
@@ -905,10 +1041,18 @@ function startSearch(sessionId, domains) {
  */
 async function startServer() {
   try {
+    console.log('Starting Domain Price Searcher...');
+    console.log('Environment:', process.env.NODE_ENV || 'development');
+    console.log('Port:', PORT);
+
     console.log('Initializing database...');
     db.init();
 
-    app.listen(PORT, () => {
+    // Create admin user if not exists
+    console.log('Setting up admin user...');
+    await ensureAdminUser();
+
+    app.listen(PORT, '0.0.0.0', () => {
       console.log('='.repeat(50));
       console.log(`Domain Price Searcher running at http://localhost:${PORT}`);
       console.log('='.repeat(50));

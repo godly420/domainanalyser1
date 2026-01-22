@@ -840,6 +840,12 @@
           <span class="status-dot"></span>
           <span class="status-text">Connected</span>
         </div>
+        <div class="user-section" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);">
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <span id="currentUser" style="font-size: 13px; color: var(--text-secondary);"></span>
+            <button onclick="logout()" style="background: none; border: 1px solid var(--border); color: var(--text-secondary); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; transition: all 0.2s;" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='none'">Logout</button>
+          </div>
+        </div>
       </div>
     </aside>
 
@@ -990,7 +996,33 @@ forbes.com"></textarea>
     });
 
     // Load task history on page load
-    document.addEventListener('DOMContentLoaded', loadTaskHistory);
+    document.addEventListener('DOMContentLoaded', () => {
+      loadTaskHistory();
+      loadCurrentUser();
+    });
+
+    // Auth functions
+    async function loadCurrentUser() {
+      try {
+        const response = await fetch('/api/auth/me');
+        const data = await response.json();
+        if (data.user) {
+          document.getElementById('currentUser').textContent = data.user.username;
+        }
+      } catch (error) {
+        console.error('Failed to load user:', error);
+      }
+    }
+
+    async function logout() {
+      try {
+        await fetch('/api/auth/logout', { method: 'POST' });
+        window.location.href = '/login.html';
+      } catch (error) {
+        console.error('Logout failed:', error);
+        window.location.href = '/login.html';
+      }
+    }
 
     async function loadTaskHistory() {
       const historyList = document.getElementById('history-list');
