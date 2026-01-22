@@ -26,8 +26,8 @@ app.use(cookieParser());
 // Public paths that don't require auth
 const publicPaths = ['/login.html', '/api/auth/login', '/api/auth/setup-required'];
 
-// Auth middleware
-function requireAuth(req, res, next) {
+// Auth middleware (async for PostgreSQL)
+async function requireAuth(req, res, next) {
   // Allow public paths
   if (publicPaths.some(p => req.path === p || req.path.startsWith('/api/auth/'))) {
     return next();
@@ -45,18 +45,27 @@ function requireAuth(req, res, next) {
   }
 
   // Validate session
-  const session = db.getAuthSession(sessionId);
-  if (!session) {
+  try {
+    const session = await db.getAuthSession(sessionId);
+    if (!session) {
+      res.clearCookie('session');
+      if (req.path.startsWith('/api/')) {
+        return res.status(401).json({ error: 'Session expired' });
+      }
+      return res.redirect('/login.html');
+    }
+
+    // Attach user info to request
+    req.user = { id: session.user_id, username: session.username };
+    next();
+  } catch (error) {
+    console.error('Auth error:', error);
     res.clearCookie('session');
     if (req.path.startsWith('/api/')) {
-      return res.status(401).json({ error: 'Session expired' });
+      return res.status(401).json({ error: 'Authentication error' });
     }
     return res.redirect('/login.html');
   }
-
-  // Attach user info to request
-  req.user = { id: session.user_id, username: session.username };
-  next();
 }
 
 // Apply auth middleware before static files
@@ -71,10 +80,10 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
 
 // Create default admin user on startup if not exists (called after db.init)
 async function ensureAdminUser() {
-  const existingAdmin = db.getUserByUsername(ADMIN_USERNAME);
+  const existingAdmin = await db.getUserByUsername(ADMIN_USERNAME);
   if (!existingAdmin) {
     const passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 10);
-    db.createUser(ADMIN_USERNAME, passwordHash);
+    await db.createUser(ADMIN_USERNAME, passwordHash);
     console.log(`Created admin user: ${ADMIN_USERNAME}`);
   }
 }
@@ -94,7 +103,7 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     // Find user
-    const user = db.getUserByUsername(username);
+    const user = await db.getUserByUsername(username);
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
@@ -106,8 +115,8 @@ app.post('/api/auth/login', async (req, res) => {
 
     // Create session - long expiry (30 days) but cookie is session-based
     const sessionId = uuidv4();
-    db.createAuthSession(sessionId, user.id, 24 * 30); // 30 days in DB
-    db.updateLastLogin(user.id);
+    await db.createAuthSession(sessionId, user.id, 24 * 30); // 30 days in DB
+    await db.updateLastLogin(user.id);
 
     // Set session cookie (no maxAge = expires when browser closes)
     res.cookie('session', sessionId, {
@@ -125,10 +134,10 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 // Logout
-app.post('/api/auth/logout', (req, res) => {
+app.post('/api/auth/logout', async (req, res) => {
   const sessionId = req.cookies.session;
   if (sessionId) {
-    db.deleteAuthSession(sessionId);
+    await db.deleteAuthSession(sessionId);
     res.clearCookie('session');
   }
   res.json({ success: true });
@@ -177,9 +186,9 @@ function isAnyTaskRunning() {
 /**
  * Get the next queued task and start it
  */
-function startNextQueuedTask() {
+async function startNextQueuedTask() {
   // Find the oldest queued task
-  const tasks = db.getTasks({ status: 'queued' });
+  const tasks = await db.getTasks({ status: 'queued' });
   if (tasks && tasks.length > 0) {
     const nextTask = tasks[0];
     console.log(`Starting next queued task: ${nextTask.id}`);
@@ -213,7 +222,7 @@ app.post('/api/search', async (req, res) => {
 
     // Create session
     const sessionId = uuidv4();
-    db.createSession(sessionId, cleanDomains.length);
+    await db.createSession(sessionId, cleanDomains.length);
 
     // Store session info
     activeSessions.set(sessionId, {
@@ -282,11 +291,11 @@ app.get('/api/search/:sessionId/stream', (req, res) => {
  * GET /api/search/:sessionId/export
  * Export results to CSV
  */
-app.get('/api/search/:sessionId/export', (req, res) => {
+app.get('/api/search/:sessionId/export', async (req, res) => {
   try {
     const { sessionId } = req.params;
 
-    const csv = db.exportToCsv(sessionId);
+    const csv = await db.exportToCsv(sessionId);
 
     if (!csv) {
       return res.status(404).json({ error: 'No results found for this session' });
@@ -306,10 +315,13 @@ app.get('/api/search/:sessionId/export', (req, res) => {
  * GET /api/search/:sessionId/status
  * Get session status
  */
-app.get('/api/search/:sessionId/status', (req, res) => {
+app.get('/api/search/:sessionId/status', async (req, res) => {
   const { sessionId } = req.params;
 
-  const session = activeSessions.get(sessionId) || db.getSession(sessionId);
+  let session = activeSessions.get(sessionId);
+  if (!session) {
+    session = await db.getSession(sessionId);
+  }
 
   if (!session) {
     return res.status(404).json({ error: 'Session not found' });
@@ -328,10 +340,10 @@ app.get('/api/search/:sessionId/status', (req, res) => {
  * GET /api/search/:sessionId/results
  * Get all results for a session (for restoring state)
  */
-app.get('/api/search/:sessionId/results', (req, res) => {
+app.get('/api/search/:sessionId/results', async (req, res) => {
   try {
     const { sessionId } = req.params;
-    const results = db.getResults(sessionId);
+    const results = await db.getResults(sessionId);
     res.json({ results });
   } catch (error) {
     console.error('Error fetching results:', error);
@@ -347,7 +359,7 @@ app.get('/api/search/:sessionId/results', (req, res) => {
  * GET /api/publishers
  * Get all publishers with filtering and pagination
  */
-app.get('/api/publishers', (req, res) => {
+app.get('/api/publishers', async (req, res) => {
   try {
     const options = {
       search: req.query.search,
@@ -375,8 +387,8 @@ app.get('/api/publishers', (req, res) => {
       offset: req.query.offset ? parseInt(req.query.offset) : undefined
     };
 
-    const publishers = db.getPublishers(options);
-    const total = db.getPublisherCount(options);
+    const publishers = await db.getPublishers(options);
+    const total = await db.getPublisherCount(options);
 
     res.json({
       publishers,
@@ -394,9 +406,9 @@ app.get('/api/publishers', (req, res) => {
  * GET /api/publishers/stats
  * Get publisher statistics
  */
-app.get('/api/publishers/stats', (req, res) => {
+app.get('/api/publishers/stats', async (req, res) => {
   try {
-    const stats = db.getPublisherStats();
+    const stats = await db.getPublisherStats();
     res.json(stats);
   } catch (error) {
     console.error('Error fetching stats:', error);
@@ -408,7 +420,7 @@ app.get('/api/publishers/stats', (req, res) => {
  * GET /api/publishers/export
  * Export publishers to CSV
  */
-app.get('/api/publishers/export', (req, res) => {
+app.get('/api/publishers/export', async (req, res) => {
   try {
     const options = {
       search: req.query.search,
@@ -432,7 +444,7 @@ app.get('/api/publishers/export', (req, res) => {
       sortOrder: req.query.sortOrder || 'asc'
     };
 
-    const csv = db.exportPublishersToCsv(options);
+    const csv = await db.exportPublishersToCsv(options);
 
     if (!csv) {
       return res.status(404).json({ error: 'No publishers found' });
@@ -451,10 +463,10 @@ app.get('/api/publishers/export', (req, res) => {
  * GET /api/publishers/:domain
  * Get a single publisher
  */
-app.get('/api/publishers/:domain', (req, res) => {
+app.get('/api/publishers/:domain', async (req, res) => {
   try {
     const domain = req.params.domain.toLowerCase();
-    const publisher = db.getPublisher(domain);
+    const publisher = await db.getPublisher(domain);
 
     if (!publisher) {
       return res.status(404).json({ error: 'Publisher not found' });
@@ -483,10 +495,10 @@ app.post('/api/publishers/:domain/refresh', async (req, res) => {
 
     if (result) {
       // Update publisher
-      db.savePublisher(result);
-      db.markRefreshed(domain);
+      await db.savePublisher(result);
+      await db.markRefreshed(domain);
 
-      const updated = db.getPublisher(domain);
+      const updated = await db.getPublisher(domain);
       res.json({
         success: true,
         message: 'Publisher refreshed successfully',
@@ -494,11 +506,11 @@ app.post('/api/publishers/:domain/refresh', async (req, res) => {
       });
     } else {
       // Just mark as refreshed even if no new data
-      db.markRefreshed(domain);
+      await db.markRefreshed(domain);
       res.json({
         success: true,
         message: 'No new pricing found, last refreshed timestamp updated',
-        publisher: db.getPublisher(domain)
+        publisher: await db.getPublisher(domain)
       });
     }
   } catch (error) {
@@ -511,10 +523,10 @@ app.post('/api/publishers/:domain/refresh', async (req, res) => {
  * POST /api/publishers/:domain/favorite
  * Toggle favorite status
  */
-app.post('/api/publishers/:domain/favorite', (req, res) => {
+app.post('/api/publishers/:domain/favorite', async (req, res) => {
   try {
     const domain = req.params.domain.toLowerCase();
-    const isFavorite = db.toggleFavorite(domain);
+    const isFavorite = await db.toggleFavorite(domain);
 
     res.json({
       success: true,
@@ -531,10 +543,10 @@ app.post('/api/publishers/:domain/favorite', (req, res) => {
  * DELETE /api/publishers/:domain
  * Delete a publisher
  */
-app.delete('/api/publishers/:domain', (req, res) => {
+app.delete('/api/publishers/:domain', async (req, res) => {
   try {
     const domain = req.params.domain.toLowerCase();
-    db.deletePublisher(domain);
+    await db.deletePublisher(domain);
 
     res.json({
       success: true,
@@ -554,7 +566,7 @@ app.delete('/api/publishers/:domain', (req, res) => {
  * GET /api/tasks
  * Get all tasks with filtering
  */
-app.get('/api/tasks', (req, res) => {
+app.get('/api/tasks', async (req, res) => {
   try {
     const options = {
       status: req.query.status,
@@ -563,8 +575,8 @@ app.get('/api/tasks', (req, res) => {
       offset: req.query.offset ? parseInt(req.query.offset) : undefined
     };
 
-    const tasks = db.getTasks(options);
-    const total = db.getTaskCount(options);
+    const tasks = await db.getTasks(options);
+    const total = await db.getTaskCount(options);
 
     res.json({ tasks, total });
   } catch (error) {
@@ -578,7 +590,7 @@ app.get('/api/tasks', (req, res) => {
  * Create a new task
  * Body: { name: "Task Name", domains: ["domain1.com", "domain2.com"] }
  */
-app.post('/api/tasks', (req, res) => {
+app.post('/api/tasks', async (req, res) => {
   try {
     let { name, domains } = req.body;
 
@@ -599,11 +611,11 @@ app.post('/api/tasks', (req, res) => {
 
     // Auto-generate name if not provided
     if (!name) {
-      const count = db.getTaskCount({}) + 1;
+      const count = await db.getTaskCount({}) + 1;
       name = `Task #${count}`;
     }
 
-    const task = db.createTask(name, cleanDomains);
+    const task = await db.createTask(name, cleanDomains);
 
     res.json({
       success: true,
@@ -619,16 +631,16 @@ app.post('/api/tasks', (req, res) => {
  * GET /api/tasks/:id
  * Get a single task with its domains
  */
-app.get('/api/tasks/:id', (req, res) => {
+app.get('/api/tasks/:id', async (req, res) => {
   try {
     const taskId = parseInt(req.params.id);
-    const task = db.getTask(taskId);
+    const task = await db.getTask(taskId);
 
     if (!task) {
       return res.status(404).json({ error: 'Task not found' });
     }
 
-    const domains = db.getTaskDomains(taskId);
+    const domains = await db.getTaskDomains(taskId);
 
     res.json({ task, domains });
   } catch (error) {
@@ -641,7 +653,7 @@ app.get('/api/tasks/:id', (req, res) => {
  * DELETE /api/tasks/:id
  * Delete a task
  */
-app.delete('/api/tasks/:id', (req, res) => {
+app.delete('/api/tasks/:id', async (req, res) => {
   try {
     const taskId = parseInt(req.params.id);
 
@@ -651,7 +663,7 @@ app.delete('/api/tasks/:id', (req, res) => {
       taskRunners.delete(taskId);
     }
 
-    db.deleteTask(taskId);
+    await db.deleteTask(taskId);
 
     res.json({ success: true, message: 'Task deleted' });
   } catch (error) {
@@ -667,7 +679,7 @@ app.delete('/api/tasks/:id', (req, res) => {
 app.post('/api/tasks/:id/start', async (req, res) => {
   try {
     const taskId = parseInt(req.params.id);
-    const task = db.getTask(taskId);
+    const task = await db.getTask(taskId);
 
     if (!task) {
       return res.status(404).json({ error: 'Task not found' });
@@ -684,8 +696,8 @@ app.post('/api/tasks/:id/start', async (req, res) => {
     // Check if another task is running
     if (isAnyTaskRunning()) {
       // Add to queue instead of starting immediately
-      db.updateTaskStatus(taskId, 'queued');
-      broadcastTaskUpdate(taskId);
+      await db.updateTaskStatus(taskId, 'queued');
+      await broadcastTaskUpdate(taskId);
       console.log(`Task ${taskId} added to queue (task ${currentRunningTaskId} is running)`);
       res.json({ success: true, message: 'Task added to queue', queued: true });
     } else {
@@ -703,10 +715,10 @@ app.post('/api/tasks/:id/start', async (req, res) => {
  * POST /api/tasks/:id/pause
  * Pause a running task
  */
-app.post('/api/tasks/:id/pause', (req, res) => {
+app.post('/api/tasks/:id/pause', async (req, res) => {
   try {
     const taskId = parseInt(req.params.id);
-    const task = db.getTask(taskId);
+    const task = await db.getTask(taskId);
 
     if (!task) {
       return res.status(404).json({ error: 'Task not found' });
@@ -721,10 +733,10 @@ app.post('/api/tasks/:id/pause', (req, res) => {
       taskRunners.get(taskId).paused = true;
     }
 
-    db.updateTaskStatus(taskId, 'paused');
+    await db.updateTaskStatus(taskId, 'paused');
 
     // Broadcast status change
-    broadcastTaskUpdate(taskId);
+    await broadcastTaskUpdate(taskId);
 
     res.json({ success: true, message: 'Task paused' });
   } catch (error) {
@@ -737,10 +749,10 @@ app.post('/api/tasks/:id/pause', (req, res) => {
  * POST /api/tasks/:id/cancel
  * Cancel a task (or remove from queue)
  */
-app.post('/api/tasks/:id/cancel', (req, res) => {
+app.post('/api/tasks/:id/cancel', async (req, res) => {
   try {
     const taskId = parseInt(req.params.id);
-    const task = db.getTask(taskId);
+    const task = await db.getTask(taskId);
 
     if (!task) {
       return res.status(404).json({ error: 'Task not found' });
@@ -748,8 +760,8 @@ app.post('/api/tasks/:id/cancel', (req, res) => {
 
     // If task was queued, just set back to pending (can be started later)
     if (task.status === 'queued') {
-      db.updateTaskStatus(taskId, 'pending');
-      broadcastTaskUpdate(taskId);
+      await db.updateTaskStatus(taskId, 'pending');
+      await broadcastTaskUpdate(taskId);
       res.json({ success: true, message: 'Task removed from queue' });
       return;
     }
@@ -766,11 +778,11 @@ app.post('/api/tasks/:id/cancel', (req, res) => {
     }
 
     // Skip remaining domains
-    db.skipRemainingDomains(taskId);
-    db.updateTaskStatus(taskId, 'cancelled');
+    await db.skipRemainingDomains(taskId);
+    await db.updateTaskStatus(taskId, 'cancelled');
 
     // Broadcast status change
-    broadcastTaskUpdate(taskId);
+    await broadcastTaskUpdate(taskId);
 
     // Start next queued task
     startNextQueuedTask();
@@ -786,16 +798,16 @@ app.post('/api/tasks/:id/cancel', (req, res) => {
  * POST /api/tasks/:id/retry-failed
  * Retry failed domains in a task
  */
-app.post('/api/tasks/:id/retry-failed', (req, res) => {
+app.post('/api/tasks/:id/retry-failed', async (req, res) => {
   try {
     const taskId = parseInt(req.params.id);
-    const task = db.getTask(taskId);
+    const task = await db.getTask(taskId);
 
     if (!task) {
       return res.status(404).json({ error: 'Task not found' });
     }
 
-    const count = db.retryFailedDomains(taskId);
+    const count = await db.retryFailedDomains(taskId);
 
     res.json({
       success: true,
@@ -812,9 +824,9 @@ app.post('/api/tasks/:id/retry-failed', (req, res) => {
  * GET /api/tasks/:id/stream
  * SSE endpoint for task progress updates
  */
-app.get('/api/tasks/:id/stream', (req, res) => {
+app.get('/api/tasks/:id/stream', async (req, res) => {
   const taskId = parseInt(req.params.id);
-  const task = db.getTask(taskId);
+  const task = await db.getTask(taskId);
 
   if (!task) {
     return res.status(404).json({ error: 'Task not found' });
@@ -833,8 +845,9 @@ app.get('/api/tasks/:id/stream', (req, res) => {
   taskSseConnections.get(taskId).add(res);
 
   // Send current state
-  const domains = db.getTaskDomains(taskId);
-  res.write(`event: init\ndata: ${JSON.stringify({ task: db.getTask(taskId), domains })}\n\n`);
+  const domains = await db.getTaskDomains(taskId);
+  const currentTask = await db.getTask(taskId);
+  res.write(`event: init\ndata: ${JSON.stringify({ task: currentTask, domains })}\n\n`);
 
   // Handle client disconnect
   req.on('close', () => {
@@ -852,16 +865,16 @@ app.get('/api/tasks/:id/stream', (req, res) => {
  * GET /api/tasks/:id/export
  * Export task results to CSV
  */
-app.get('/api/tasks/:id/export', (req, res) => {
+app.get('/api/tasks/:id/export', async (req, res) => {
   try {
     const taskId = parseInt(req.params.id);
-    const task = db.getTask(taskId);
+    const task = await db.getTask(taskId);
 
     if (!task) {
       return res.status(404).json({ error: 'Task not found' });
     }
 
-    const csv = db.exportTaskToCsv(taskId);
+    const csv = await db.exportTaskToCsv(taskId);
 
     if (!csv) {
       return res.status(404).json({ error: 'No results found' });
@@ -879,12 +892,12 @@ app.get('/api/tasks/:id/export', (req, res) => {
 /**
  * Broadcast task update to all connected SSE clients
  */
-function broadcastTaskUpdate(taskId) {
+async function broadcastTaskUpdate(taskId) {
   const connections = taskSseConnections.get(taskId);
   if (!connections) return;
 
-  const task = db.getTask(taskId);
-  const domains = db.getTaskDomains(taskId);
+  const task = await db.getTask(taskId);
+  const domains = await db.getTaskDomains(taskId);
 
   const data = JSON.stringify({ task, domains });
 
@@ -897,7 +910,7 @@ function broadcastTaskUpdate(taskId) {
  * Run a task - process domains one by one
  */
 async function runTask(taskId) {
-  const task = db.getTask(taskId);
+  const task = await db.getTask(taskId);
   if (!task) return;
 
   // Track this as the current running task
@@ -905,11 +918,11 @@ async function runTask(taskId) {
 
   // Set up runner state
   taskRunners.set(taskId, { paused: false, cancelled: false });
-  db.updateTaskStatus(taskId, 'running');
-  broadcastTaskUpdate(taskId);
+  await db.updateTaskStatus(taskId, 'running');
+  await broadcastTaskUpdate(taskId);
 
   const accounts = config.emailAccounts;
-  const pendingDomains = db.getTaskDomains(taskId, 'pending');
+  const pendingDomains = await db.getTaskDomains(taskId, 'pending');
 
   console.log(`Starting task ${taskId}: ${pendingDomains.length} domains to process`);
 
@@ -929,8 +942,8 @@ async function runTask(taskId) {
     console.log(`Task ${taskId}: Processing ${domain}`);
 
     // Mark domain as running
-    db.updateTaskDomain(domainRecord.id, 'running');
-    broadcastTaskUpdate(taskId);
+    await db.updateTaskDomain(domainRecord.id, 'running');
+    await broadcastTaskUpdate(taskId);
 
     try {
       // Search for the domain
@@ -944,33 +957,33 @@ async function runTask(taskId) {
 
       if (hasPricing) {
         // Found price - mark as completed (success)
-        db.updateTaskDomain(domainRecord.id, 'completed', result);
-        db.incrementTaskProgress(taskId, 'successful');
-        db.savePublisher(result, taskId);
+        await db.updateTaskDomain(domainRecord.id, 'completed', result);
+        await db.incrementTaskProgress(taskId, 'successful');
+        await db.savePublisher(result, taskId);
         console.log(`Task ${taskId}: Found price for ${domain}: ${result.guest_post_price} ${result.currency}`);
       } else {
         // No price found - mark as no_result (not failed, just no data)
-        db.updateTaskDomain(domainRecord.id, 'no_result', { guest_post_price: null });
-        db.incrementTaskProgress(taskId, 'no_result');
+        await db.updateTaskDomain(domainRecord.id, 'no_result', { guest_post_price: null });
+        await db.incrementTaskProgress(taskId, 'no_result');
         // Still save to publishers for manual outreach
-        db.savePublisher({ domain }, taskId);
+        await db.savePublisher({ domain }, taskId);
         console.log(`Task ${taskId}: No price found for ${domain} (added to publishers for outreach)`);
       }
     } catch (error) {
       console.error(`Task ${taskId}: Error processing ${domain}:`, error.message);
-      db.updateTaskDomain(domainRecord.id, 'failed', { error: error.message });
-      db.incrementTaskProgress(taskId, 'failed');
+      await db.updateTaskDomain(domainRecord.id, 'failed', { error: error.message });
+      await db.incrementTaskProgress(taskId, 'failed');
     }
 
     // Broadcast progress
-    broadcastTaskUpdate(taskId);
+    await broadcastTaskUpdate(taskId);
   }
 
   // Check final state
   const runner = taskRunners.get(taskId);
   if (runner && !runner.paused && !runner.cancelled) {
     // Task completed normally
-    db.updateTaskStatus(taskId, 'completed');
+    await db.updateTaskStatus(taskId, 'completed');
     console.log(`Task ${taskId} completed`);
   }
 
@@ -983,7 +996,7 @@ async function runTask(taskId) {
   }
 
   // Final broadcast
-  broadcastTaskUpdate(taskId);
+  await broadcastTaskUpdate(taskId);
 
   // Start the next queued task (if any)
   if (!runner?.paused) {
@@ -998,12 +1011,12 @@ async function runTask(taskId) {
 function startSearch(sessionId, domains) {
   const session = activeSessions.get(sessionId);
 
-  const onResult = (result) => {
+  const onResult = async (result) => {
     // Save to search results database
-    db.saveResult(sessionId, result);
+    await db.saveResult(sessionId, result);
 
     // Save/update publisher master list
-    db.savePublisher(result);
+    await db.savePublisher(result);
 
     // Store in session
     session.results.push(result);
@@ -1027,9 +1040,9 @@ function startSearch(sessionId, domains) {
     }
   };
 
-  const onComplete = () => {
+  const onComplete = async () => {
     session.status = 'complete';
-    db.completeSession(sessionId);
+    await db.completeSession(sessionId);
 
     // Send complete event
     const connection = sseConnections.get(sessionId);
@@ -1057,7 +1070,7 @@ async function startServer() {
     console.log('Port:', PORT);
 
     console.log('Initializing database...');
-    db.init();
+    await db.init();
 
     // Create admin user if not exists
     console.log('Setting up admin user...');
@@ -1077,15 +1090,15 @@ async function startServer() {
 startServer();
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   console.log('Shutting down...');
-  db.close();
+  await db.close();
   process.exit(0);
 });
 
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   console.log('Shutting down...');
-  db.close();
+  await db.close();
   process.exit(0);
 });
 

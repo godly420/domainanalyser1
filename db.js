@@ -1,32 +1,34 @@
 /**
  * Database module for Domain Price Searcher
- * Stores search sessions, results, and publisher master list
+ * PostgreSQL version - stores search sessions, results, and publisher master list
  */
 
-const Database = require('better-sqlite3');
-const path = require('path');
+const { Pool } = require('pg');
 
-// Use /data mount if available, otherwise use local path
-const DB_PATH = process.env.DATABASE_PATH ||
-  (process.env.NODE_ENV === 'production' && require('fs').existsSync('/data')
-    ? '/data/price-scraper.db'
-    : path.join(__dirname, 'price-scraper.db'));
+// Connection string from environment variable
+const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres:password@localhost:5432/price_scraper';
 
-let db;
+let pool;
 
 /**
  * Initialize database and create tables
  */
-function init() {
+async function init() {
   try {
-    db = new Database(DB_PATH);
-    db.pragma('foreign_keys = ON');
+    pool = new Pool({
+      connectionString: DATABASE_URL,
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    });
+
+    // Test connection
+    await pool.query('SELECT NOW()');
+    console.log('Database connected:', DATABASE_URL.replace(/:[^:@]+@/, ':****@'));
 
     // Search sessions table
-    db.exec(`
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS search_sessions (
         id TEXT PRIMARY KEY,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         domains_count INTEGER DEFAULT 0,
         results_count INTEGER DEFAULT 0,
         status TEXT DEFAULT 'running'
@@ -34,10 +36,10 @@ function init() {
     `);
 
     // Search results table
-    db.exec(`
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS search_results (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        session_id TEXT NOT NULL,
+        id SERIAL PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES search_sessions(id),
         domain TEXT NOT NULL,
         guest_post_price REAL,
         link_insertion_price REAL,
@@ -51,15 +53,14 @@ function init() {
         account TEXT,
         confidence TEXT,
         notes TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (session_id) REFERENCES search_sessions(id)
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
-    // Publishers master table - stores unique domains with latest pricing
-    db.exec(`
+    // Publishers master table
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS publishers (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         domain TEXT UNIQUE NOT NULL,
         guest_post_price REAL,
         link_insertion_price REAL,
@@ -73,9 +74,9 @@ function init() {
         source_account TEXT,
         confidence TEXT,
         notes TEXT,
-        first_found TEXT DEFAULT CURRENT_TIMESTAMP,
-        last_updated TEXT DEFAULT CURRENT_TIMESTAMP,
-        last_refreshed TEXT DEFAULT CURRENT_TIMESTAMP,
+        first_found TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        last_refreshed TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         search_count INTEGER DEFAULT 1,
         is_favorite INTEGER DEFAULT 0,
         tags TEXT,
@@ -83,17 +84,10 @@ function init() {
       )
     `);
 
-    // Add last_task_id column if it doesn't exist (migration)
-    try {
-      db.exec('ALTER TABLE publishers ADD COLUMN last_task_id INTEGER');
-    } catch (e) {
-      // Column already exists
-    }
-
-    // Tasks table - batch domain searches
-    db.exec(`
+    // Tasks table
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS tasks (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         name TEXT NOT NULL,
         status TEXT DEFAULT 'pending',
         total_domains INTEGER DEFAULT 0,
@@ -101,25 +95,18 @@ function init() {
         successful_domains INTEGER DEFAULT 0,
         no_result_domains INTEGER DEFAULT 0,
         failed_domains INTEGER DEFAULT 0,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        started_at TEXT,
-        completed_at TEXT,
-        paused_at TEXT
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        started_at TIMESTAMP,
+        completed_at TIMESTAMP,
+        paused_at TIMESTAMP
       )
     `);
 
-    // Add no_result_domains column if it doesn't exist (migration)
-    try {
-      db.exec('ALTER TABLE tasks ADD COLUMN no_result_domains INTEGER DEFAULT 0');
-    } catch (e) {
-      // Column already exists
-    }
-
-    // Task domains table - individual domains within a task
-    db.exec(`
+    // Task domains table
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS task_domains (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        task_id INTEGER NOT NULL,
+        id SERIAL PRIMARY KEY,
+        task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
         domain TEXT NOT NULL,
         status TEXT DEFAULT 'pending',
         guest_post_price REAL,
@@ -128,48 +115,44 @@ function init() {
         contact_email TEXT,
         confidence TEXT,
         error_message TEXT,
-        started_at TEXT,
-        completed_at TEXT,
-        FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+        started_at TIMESTAMP,
+        completed_at TIMESTAMP
       )
     `);
 
-    // Users table for authentication
-    db.exec(`
+    // Users table
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         username TEXT UNIQUE NOT NULL,
         password_hash TEXT NOT NULL,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        last_login TEXT
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        last_login TIMESTAMP
       )
     `);
 
-    // Sessions table for login sessions
-    db.exec(`
+    // Sessions table
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS sessions (
         id TEXT PRIMARY KEY,
-        user_id INTEGER NOT NULL,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        expires_at TEXT NOT NULL,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        expires_at TIMESTAMP NOT NULL
       )
     `);
 
     // Indexes
-    db.exec(`
-      CREATE INDEX IF NOT EXISTS idx_results_session ON search_results(session_id);
-      CREATE INDEX IF NOT EXISTS idx_results_domain ON search_results(domain);
-      CREATE INDEX IF NOT EXISTS idx_publishers_domain ON publishers(domain);
-      CREATE INDEX IF NOT EXISTS idx_publishers_updated ON publishers(last_updated);
-      CREATE INDEX IF NOT EXISTS idx_task_domains_task ON task_domains(task_id);
-      CREATE INDEX IF NOT EXISTS idx_task_domains_status ON task_domains(status);
-      CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
-      CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
-    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_results_session ON search_results(session_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_results_domain ON search_results(domain)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_publishers_domain ON publishers(domain)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_publishers_updated ON publishers(last_updated)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_task_domains_task ON task_domains(task_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_task_domains_status ON task_domains(status)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at)`);
 
-    console.log('Database initialized:', DB_PATH);
-    return db;
+    console.log('Database initialized successfully');
+    return pool;
   } catch (error) {
     console.error('Database init error:', error);
     throw error;
@@ -178,114 +161,94 @@ function init() {
 
 /**
  * Create a new search session
- * @param {string} sessionId - UUID for the session
- * @param {number} domainsCount - Number of domains to search
  */
-function createSession(sessionId, domainsCount) {
-  const stmt = db.prepare(`
-    INSERT INTO search_sessions (id, domains_count, status)
-    VALUES (?, ?, 'running')
-  `);
-  stmt.run(sessionId, domainsCount);
+async function createSession(sessionId, domainsCount) {
+  await pool.query(
+    `INSERT INTO search_sessions (id, domains_count, status) VALUES ($1, $2, 'running')`,
+    [sessionId, domainsCount]
+  );
 }
 
 /**
  * Save a search result
- * @param {string} sessionId - Session ID
- * @param {Object} result - Result data
  */
-function saveResult(sessionId, result) {
-  const stmt = db.prepare(`
-    INSERT INTO search_results (
+async function saveResult(sessionId, result) {
+  await pool.query(
+    `INSERT INTO search_results (
       session_id, domain, guest_post_price, link_insertion_price,
       sponsored_post_price, homepage_link_price, casino_price, casino_accepted,
       currency, source_email, subject, account, confidence, notes
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-
-  stmt.run(
-    sessionId,
-    result.domain,
-    result.guest_post_price,
-    result.link_insertion_price,
-    result.sponsored_post_price,
-    result.homepage_link_price,
-    result.casino_price,
-    result.casino_accepted || 'no',
-    result.currency || 'USD',
-    result.source_email,
-    result.subject,
-    result.account,
-    result.confidence,
-    result.notes
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+    [
+      sessionId,
+      result.domain,
+      result.guest_post_price,
+      result.link_insertion_price,
+      result.sponsored_post_price,
+      result.homepage_link_price,
+      result.casino_price,
+      result.casino_accepted || 'no',
+      result.currency || 'USD',
+      result.source_email,
+      result.subject,
+      result.account,
+      result.confidence,
+      result.notes
+    ]
   );
 
-  // Update results count
-  db.prepare(`
-    UPDATE search_sessions
-    SET results_count = results_count + 1
-    WHERE id = ?
-  `).run(sessionId);
+  await pool.query(
+    `UPDATE search_sessions SET results_count = results_count + 1 WHERE id = $1`,
+    [sessionId]
+  );
 }
 
 /**
  * Mark session as complete
- * @param {string} sessionId - Session ID
  */
-function completeSession(sessionId) {
-  db.prepare(`
-    UPDATE search_sessions SET status = 'complete' WHERE id = ?
-  `).run(sessionId);
+async function completeSession(sessionId) {
+  await pool.query(
+    `UPDATE search_sessions SET status = 'complete' WHERE id = $1`,
+    [sessionId]
+  );
 }
 
 /**
  * Get all results for a session
- * @param {string} sessionId - Session ID
- * @returns {Array} Results array
  */
-function getResults(sessionId) {
-  return db.prepare(`
-    SELECT * FROM search_results WHERE session_id = ? ORDER BY created_at
-  `).all(sessionId);
+async function getResults(sessionId) {
+  const result = await pool.query(
+    `SELECT * FROM search_results WHERE session_id = $1 ORDER BY created_at`,
+    [sessionId]
+  );
+  return result.rows;
 }
 
 /**
  * Get session info
- * @param {string} sessionId - Session ID
- * @returns {Object} Session data
  */
-function getSession(sessionId) {
-  return db.prepare(`
-    SELECT * FROM search_sessions WHERE id = ?
-  `).get(sessionId);
+async function getSession(sessionId) {
+  const result = await pool.query(
+    `SELECT * FROM search_sessions WHERE id = $1`,
+    [sessionId]
+  );
+  return result.rows[0];
 }
 
 /**
  * Export results to CSV format
- * @param {string} sessionId - Session ID
- * @returns {string} CSV string
  */
-function exportToCsv(sessionId) {
-  const results = getResults(sessionId);
+async function exportToCsv(sessionId) {
+  const results = await getResults(sessionId);
 
   if (results.length === 0) {
     return '';
   }
 
   const headers = [
-    'Domain',
-    'Guest Post Price',
-    'Link Insertion Price',
-    'Sponsored Post Price',
-    'Homepage Link Price',
-    'Casino Price',
-    'Casino Accepted',
-    'Currency',
-    'Contact Email',
-    'Source Account',
-    'Subject',
-    'Confidence',
-    'Notes'
+    'Domain', 'Guest Post Price', 'Link Insertion Price', 'Sponsored Post Price',
+    'Homepage Link Price', 'Casino Price', 'Casino Accepted', 'Currency',
+    'Contact Email', 'Source Account', 'Subject', 'Confidence', 'Notes'
   ];
 
   const escapeCSV = (value) => {
@@ -298,19 +261,9 @@ function exportToCsv(sessionId) {
   };
 
   const rows = results.map(r => [
-    r.domain,
-    r.guest_post_price,
-    r.link_insertion_price,
-    r.sponsored_post_price,
-    r.homepage_link_price,
-    r.casino_price,
-    r.casino_accepted,
-    r.currency,
-    r.source_email,
-    r.account,
-    r.subject,
-    r.confidence,
-    r.notes
+    r.domain, r.guest_post_price, r.link_insertion_price, r.sponsored_post_price,
+    r.homepage_link_price, r.casino_price, r.casino_accepted, r.currency,
+    r.source_email, r.account, r.subject, r.confidence, r.notes
   ].map(escapeCSV).join(','));
 
   return [headers.join(','), ...rows].join('\n');
@@ -319,9 +272,9 @@ function exportToCsv(sessionId) {
 /**
  * Close database connection
  */
-function close() {
-  if (db) {
-    db.close();
+async function close() {
+  if (pool) {
+    await pool.end();
   }
 }
 
@@ -331,103 +284,79 @@ function close() {
 
 /**
  * Save or update a publisher in the master list
- * @param {Object} result - Search result data (can be just {domain} for no-result cases)
- * @param {number} taskId - Optional task ID that found this publisher
  */
-function savePublisher(result, taskId = null) {
+async function savePublisher(result, taskId = null) {
   if (!result || !result.domain) {
     console.log('savePublisher: No domain provided, skipping');
     return;
   }
 
-  // Extract contact name from email if present
   const contactName = result.source_email ?
     result.source_email.match(/^([^<]+)</)?.[1]?.trim() || null : null;
   const contactEmail = result.source_email ?
     result.source_email.match(/<([^>]+)>/)?.[1] || result.source_email : result.source_email;
 
-  // Check if publisher exists
-  const existing = db.prepare('SELECT * FROM publishers WHERE domain = ?').get(result.domain);
+  const existingResult = await pool.query('SELECT * FROM publishers WHERE domain = $1', [result.domain]);
+  const existing = existingResult.rows[0];
 
-  // Check if new result has any pricing data
   const hasNewPricing = result.guest_post_price || result.link_insertion_price ||
     result.sponsored_post_price || result.homepage_link_price || result.casino_price;
 
   if (existing) {
-    // Confidence ranking: high > medium > low
     const confidenceRank = { 'high': 3, 'medium': 2, 'low': 1 };
     const existingRank = confidenceRank[existing.confidence] || 0;
     const newRank = confidenceRank[result.confidence] || 0;
 
-    // Only update pricing if:
-    // 1. New result has pricing AND (new confidence >= existing OR existing has no price)
     const shouldUpdatePricing = hasNewPricing && (
-      newRank >= existingRank ||
-      existing.guest_post_price === null
+      newRank >= existingRank || existing.guest_post_price === null
     );
 
     if (shouldUpdatePricing) {
-      // Update with new data (better or equal source)
-      const stmt = db.prepare(`
+      await pool.query(`
         UPDATE publishers SET
-          guest_post_price = COALESCE(?, guest_post_price),
-          link_insertion_price = COALESCE(?, link_insertion_price),
-          sponsored_post_price = COALESCE(?, sponsored_post_price),
-          homepage_link_price = COALESCE(?, homepage_link_price),
-          casino_price = COALESCE(?, casino_price),
-          casino_accepted = COALESCE(?, casino_accepted),
-          currency = COALESCE(?, currency),
-          contact_email = COALESCE(?, contact_email),
-          contact_name = COALESCE(?, contact_name),
-          source_account = COALESCE(?, source_account),
-          confidence = COALESCE(?, confidence),
-          notes = COALESCE(?, notes),
+          guest_post_price = COALESCE($1, guest_post_price),
+          link_insertion_price = COALESCE($2, link_insertion_price),
+          sponsored_post_price = COALESCE($3, sponsored_post_price),
+          homepage_link_price = COALESCE($4, homepage_link_price),
+          casino_price = COALESCE($5, casino_price),
+          casino_accepted = COALESCE($6, casino_accepted),
+          currency = COALESCE($7, currency),
+          contact_email = COALESCE($8, contact_email),
+          contact_name = COALESCE($9, contact_name),
+          source_account = COALESCE($10, source_account),
+          confidence = COALESCE($11, confidence),
+          notes = COALESCE($12, notes),
           last_updated = CURRENT_TIMESTAMP,
           last_refreshed = CURRENT_TIMESTAMP,
           search_count = search_count + 1,
-          last_task_id = COALESCE(?, last_task_id)
-        WHERE domain = ?
-      `);
-      stmt.run(
-        result.guest_post_price,
-        result.link_insertion_price,
-        result.sponsored_post_price,
-        result.homepage_link_price,
-        result.casino_price,
-        result.casino_accepted,
-        result.currency,
-        contactEmail,
-        contactName,
-        result.account,
-        result.confidence,
-        result.notes,
-        taskId,
-        result.domain
-      );
+          last_task_id = COALESCE($13, last_task_id)
+        WHERE domain = $14
+      `, [
+        result.guest_post_price, result.link_insertion_price, result.sponsored_post_price,
+        result.homepage_link_price, result.casino_price, result.casino_accepted,
+        result.currency, contactEmail, contactName, result.account,
+        result.confidence, result.notes, taskId, result.domain
+      ]);
     } else {
-      // Keep existing data, only update search count, refresh timestamp, and task_id
-      const stmt = db.prepare(`
+      await pool.query(`
         UPDATE publishers SET
           last_refreshed = CURRENT_TIMESTAMP,
           search_count = search_count + 1,
-          last_task_id = COALESCE(?, last_task_id)
-        WHERE domain = ?
-      `);
-      stmt.run(taskId, result.domain);
+          last_task_id = COALESCE($1, last_task_id)
+        WHERE domain = $2
+      `, [taskId, result.domain]);
       if (hasNewPricing) {
         console.log(`Kept existing ${existing.confidence} data for ${result.domain} (new: ${result.confidence})`);
       }
     }
   } else {
-    // Insert new publisher (even without pricing - for manual outreach)
-    const stmt = db.prepare(`
+    await pool.query(`
       INSERT INTO publishers (
         domain, guest_post_price, link_insertion_price, sponsored_post_price,
         homepage_link_price, casino_price, casino_accepted, currency,
         contact_email, contact_name, source_account, confidence, notes, last_task_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    stmt.run(
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+    `, [
       result.domain,
       result.guest_post_price || null,
       result.link_insertion_price || null,
@@ -442,96 +371,95 @@ function savePublisher(result, taskId = null) {
       result.confidence || null,
       result.notes || null,
       taskId
-    );
+    ]);
     console.log(`Added new publisher: ${result.domain} (${hasNewPricing ? 'with pricing' : 'no pricing - for outreach'})`);
   }
 }
 
 /**
  * Get all publishers with optional filtering
- * @param {Object} options - Filter options
- * @returns {Array} Publishers array
  */
-function getPublishers(options = {}) {
+async function getPublishers(options = {}) {
   let query = `
     SELECT p.*, t.name as task_name
     FROM publishers p
     LEFT JOIN tasks t ON p.last_task_id = t.id
     WHERE 1=1`;
   const params = [];
+  let paramIndex = 1;
 
-  // Search filter
   if (options.search) {
-    query += ' AND (p.domain LIKE ? OR p.contact_email LIKE ? OR p.contact_name LIKE ?)';
-    const searchTerm = `%${options.search}%`;
-    params.push(searchTerm, searchTerm, searchTerm);
+    query += ` AND (p.domain LIKE $${paramIndex} OR p.contact_email LIKE $${paramIndex} OR p.contact_name LIKE $${paramIndex})`;
+    params.push(`%${options.search}%`);
+    paramIndex++;
   }
 
-  // Casino accepted filter
   if (options.casinoAccepted !== undefined && options.casinoAccepted !== 'all') {
-    query += ' AND p.casino_accepted = ?';
+    query += ` AND p.casino_accepted = $${paramIndex}`;
     params.push(options.casinoAccepted);
+    paramIndex++;
   }
 
-  // Guest post price range filters
   if (options.minPrice) {
-    query += ' AND p.guest_post_price >= ?';
+    query += ` AND p.guest_post_price >= $${paramIndex}`;
     params.push(options.minPrice);
+    paramIndex++;
   }
   if (options.maxPrice) {
-    query += ' AND p.guest_post_price <= ?';
+    query += ` AND p.guest_post_price <= $${paramIndex}`;
     params.push(options.maxPrice);
+    paramIndex++;
   }
 
-  // Link insertion price range filters
   if (options.minLiPrice) {
-    query += ' AND p.link_insertion_price >= ?';
+    query += ` AND p.link_insertion_price >= $${paramIndex}`;
     params.push(options.minLiPrice);
+    paramIndex++;
   }
   if (options.maxLiPrice) {
-    query += ' AND p.link_insertion_price <= ?';
+    query += ` AND p.link_insertion_price <= $${paramIndex}`;
     params.push(options.maxLiPrice);
+    paramIndex++;
   }
 
-  // Casino price range filters
   if (options.minCasinoPrice) {
-    query += ' AND p.casino_price >= ?';
+    query += ` AND p.casino_price >= $${paramIndex}`;
     params.push(options.minCasinoPrice);
+    paramIndex++;
   }
   if (options.maxCasinoPrice) {
-    query += ' AND p.casino_price <= ?';
+    query += ` AND p.casino_price <= $${paramIndex}`;
     params.push(options.maxCasinoPrice);
+    paramIndex++;
   }
 
-  // Date range filters
   if (options.dateFrom) {
-    query += ' AND p.last_updated >= ?';
+    query += ` AND p.last_updated >= $${paramIndex}`;
     params.push(options.dateFrom);
+    paramIndex++;
   }
   if (options.dateTo) {
-    query += ' AND p.last_updated <= ?';
+    query += ` AND p.last_updated <= $${paramIndex}`;
     params.push(options.dateTo + ' 23:59:59');
+    paramIndex++;
   }
 
-  // Favorites filter
   if (options.favoritesOnly) {
     query += ' AND p.is_favorite = 1';
   }
 
-  // Has price filter (for filtering publishers with/without pricing)
   if (options.hasPrice === 'yes') {
     query += ' AND (p.guest_post_price IS NOT NULL OR p.link_insertion_price IS NOT NULL OR p.casino_price IS NOT NULL)';
   } else if (options.hasPrice === 'no') {
     query += ' AND p.guest_post_price IS NULL AND p.link_insertion_price IS NULL AND p.casino_price IS NULL';
   }
 
-  // Task filter (filter by which task found this publisher)
   if (options.taskId) {
-    query += ' AND p.last_task_id = ?';
+    query += ` AND p.last_task_id = $${paramIndex}`;
     params.push(options.taskId);
+    paramIndex++;
   }
 
-  // Sorting
   const sortColumn = options.sortBy || 'last_updated';
   const sortOrder = options.sortOrder === 'asc' ? 'ASC' : 'DESC';
   const validColumns = ['domain', 'guest_post_price', 'casino_price', 'last_updated', 'first_found', 'search_count'];
@@ -541,161 +469,153 @@ function getPublishers(options = {}) {
     query += ' ORDER BY p.last_updated DESC';
   }
 
-  // Pagination
   if (options.limit) {
-    query += ' LIMIT ?';
+    query += ` LIMIT $${paramIndex}`;
     params.push(options.limit);
+    paramIndex++;
     if (options.offset) {
-      query += ' OFFSET ?';
+      query += ` OFFSET $${paramIndex}`;
       params.push(options.offset);
+      paramIndex++;
     }
   }
 
-  return db.prepare(query).all(...params);
+  const result = await pool.query(query, params);
+  return result.rows;
 }
 
 /**
  * Get total publisher count for pagination
- * @param {Object} options - Filter options
- * @returns {number} Total count
  */
-function getPublisherCount(options = {}) {
+async function getPublisherCount(options = {}) {
   let query = 'SELECT COUNT(*) as count FROM publishers WHERE 1=1';
   const params = [];
+  let paramIndex = 1;
 
   if (options.search) {
-    query += ' AND (domain LIKE ? OR contact_email LIKE ? OR contact_name LIKE ?)';
-    const searchTerm = `%${options.search}%`;
-    params.push(searchTerm, searchTerm, searchTerm);
+    query += ` AND (domain LIKE $${paramIndex} OR contact_email LIKE $${paramIndex} OR contact_name LIKE $${paramIndex})`;
+    params.push(`%${options.search}%`);
+    paramIndex++;
   }
 
   if (options.casinoAccepted !== undefined && options.casinoAccepted !== 'all') {
-    query += ' AND casino_accepted = ?';
+    query += ` AND casino_accepted = $${paramIndex}`;
     params.push(options.casinoAccepted);
+    paramIndex++;
   }
 
   if (options.minPrice) {
-    query += ' AND guest_post_price >= ?';
+    query += ` AND guest_post_price >= $${paramIndex}`;
     params.push(options.minPrice);
+    paramIndex++;
   }
   if (options.maxPrice) {
-    query += ' AND guest_post_price <= ?';
+    query += ` AND guest_post_price <= $${paramIndex}`;
     params.push(options.maxPrice);
+    paramIndex++;
   }
 
   if (options.minLiPrice) {
-    query += ' AND link_insertion_price >= ?';
+    query += ` AND link_insertion_price >= $${paramIndex}`;
     params.push(options.minLiPrice);
+    paramIndex++;
   }
   if (options.maxLiPrice) {
-    query += ' AND link_insertion_price <= ?';
+    query += ` AND link_insertion_price <= $${paramIndex}`;
     params.push(options.maxLiPrice);
+    paramIndex++;
   }
 
   if (options.minCasinoPrice) {
-    query += ' AND casino_price >= ?';
+    query += ` AND casino_price >= $${paramIndex}`;
     params.push(options.minCasinoPrice);
+    paramIndex++;
   }
   if (options.maxCasinoPrice) {
-    query += ' AND casino_price <= ?';
+    query += ` AND casino_price <= $${paramIndex}`;
     params.push(options.maxCasinoPrice);
+    paramIndex++;
   }
 
   if (options.dateFrom) {
-    query += ' AND last_updated >= ?';
+    query += ` AND last_updated >= $${paramIndex}`;
     params.push(options.dateFrom);
+    paramIndex++;
   }
   if (options.dateTo) {
-    query += ' AND last_updated <= ?';
+    query += ` AND last_updated <= $${paramIndex}`;
     params.push(options.dateTo + ' 23:59:59');
+    paramIndex++;
   }
 
   if (options.favoritesOnly) {
     query += ' AND is_favorite = 1';
   }
 
-  // Has price filter
   if (options.hasPrice === 'yes') {
     query += ' AND (guest_post_price IS NOT NULL OR link_insertion_price IS NOT NULL OR casino_price IS NOT NULL)';
   } else if (options.hasPrice === 'no') {
     query += ' AND guest_post_price IS NULL AND link_insertion_price IS NULL AND casino_price IS NULL';
   }
 
-  // Task filter
   if (options.taskId) {
-    query += ' AND last_task_id = ?';
+    query += ` AND last_task_id = $${paramIndex}`;
     params.push(options.taskId);
+    paramIndex++;
   }
 
-  return db.prepare(query).get(...params).count;
+  const result = await pool.query(query, params);
+  return parseInt(result.rows[0].count);
 }
 
 /**
  * Get a single publisher by domain
- * @param {string} domain - Domain name
- * @returns {Object|null} Publisher data
  */
-function getPublisher(domain) {
-  return db.prepare('SELECT * FROM publishers WHERE domain = ?').get(domain);
+async function getPublisher(domain) {
+  const result = await pool.query('SELECT * FROM publishers WHERE domain = $1', [domain]);
+  return result.rows[0];
 }
 
 /**
  * Delete a publisher
- * @param {string} domain - Domain to delete
  */
-function deletePublisher(domain) {
-  db.prepare('DELETE FROM publishers WHERE domain = ?').run(domain);
+async function deletePublisher(domain) {
+  await pool.query('DELETE FROM publishers WHERE domain = $1', [domain]);
 }
 
 /**
  * Toggle favorite status
- * @param {string} domain - Domain name
- * @returns {boolean} New favorite status
  */
-function toggleFavorite(domain) {
-  const publisher = getPublisher(domain);
+async function toggleFavorite(domain) {
+  const publisher = await getPublisher(domain);
   if (!publisher) return false;
 
   const newStatus = publisher.is_favorite ? 0 : 1;
-  db.prepare('UPDATE publishers SET is_favorite = ? WHERE domain = ?').run(newStatus, domain);
+  await pool.query('UPDATE publishers SET is_favorite = $1 WHERE domain = $2', [newStatus, domain]);
   return newStatus === 1;
 }
 
 /**
  * Update publisher's last refreshed timestamp
- * @param {string} domain - Domain name
  */
-function markRefreshed(domain) {
-  db.prepare('UPDATE publishers SET last_refreshed = CURRENT_TIMESTAMP WHERE domain = ?').run(domain);
+async function markRefreshed(domain) {
+  await pool.query('UPDATE publishers SET last_refreshed = CURRENT_TIMESTAMP WHERE domain = $1', [domain]);
 }
 
 /**
  * Export all publishers to CSV
- * @param {Object} options - Filter options
- * @returns {string} CSV string
  */
-function exportPublishersToCsv(options = {}) {
-  const publishers = getPublishers(options);
+async function exportPublishersToCsv(options = {}) {
+  const publishers = await getPublishers(options);
 
   if (publishers.length === 0) {
     return '';
   }
 
   const headers = [
-    'Domain',
-    'Guest Post Price',
-    'Link Insertion Price',
-    'Casino Price',
-    'Casino Accepted',
-    'Currency',
-    'Contact Email',
-    'Contact Name',
-    'Source Account',
-    'Confidence',
-    'First Found',
-    'Last Updated',
-    'Search Count',
-    'Notes'
+    'Domain', 'Guest Post Price', 'Link Insertion Price', 'Casino Price',
+    'Casino Accepted', 'Currency', 'Contact Email', 'Contact Name',
+    'Source Account', 'Confidence', 'First Found', 'Last Updated', 'Search Count', 'Notes'
   ];
 
   const escapeCSV = (value) => {
@@ -708,20 +628,9 @@ function exportPublishersToCsv(options = {}) {
   };
 
   const rows = publishers.map(p => [
-    p.domain,
-    p.guest_post_price,
-    p.link_insertion_price,
-    p.casino_price,
-    p.casino_accepted,
-    p.currency,
-    p.contact_email,
-    p.contact_name,
-    p.source_account,
-    p.confidence,
-    p.first_found,
-    p.last_updated,
-    p.search_count,
-    p.notes
+    p.domain, p.guest_post_price, p.link_insertion_price, p.casino_price,
+    p.casino_accepted, p.currency, p.contact_email, p.contact_name,
+    p.source_account, p.confidence, p.first_found, p.last_updated, p.search_count, p.notes
   ].map(escapeCSV).join(','));
 
   return [headers.join(','), ...rows].join('\n');
@@ -729,10 +638,9 @@ function exportPublishersToCsv(options = {}) {
 
 /**
  * Get publisher statistics
- * @returns {Object} Stats object
  */
-function getPublisherStats() {
-  const stats = db.prepare(`
+async function getPublisherStats() {
+  const result = await pool.query(`
     SELECT
       COUNT(*) as total,
       COUNT(CASE WHEN casino_accepted = 'yes' THEN 1 END) as casino_count,
@@ -742,9 +650,8 @@ function getPublisherStats() {
       AVG(casino_price) as avg_casino,
       COUNT(CASE WHEN is_favorite = 1 THEN 1 END) as favorites
     FROM publishers
-  `).get();
-
-  return stats;
+  `);
+  return result.rows[0];
 }
 
 // ============================================
@@ -753,233 +660,237 @@ function getPublisherStats() {
 
 /**
  * Create a new task with domains
- * @param {string} name - Task name
- * @param {Array<string>} domains - Array of domain names
- * @returns {Object} Created task with id
  */
-function createTask(name, domains) {
-  const stmt = db.prepare(`
-    INSERT INTO tasks (name, total_domains, status)
-    VALUES (?, ?, 'pending')
-  `);
-  const result = stmt.run(name, domains.length);
-  const taskId = result.lastInsertRowid;
+async function createTask(name, domains) {
+  const taskResult = await pool.query(
+    `INSERT INTO tasks (name, total_domains, status) VALUES ($1, $2, 'pending') RETURNING id`,
+    [name, domains.length]
+  );
+  const taskId = taskResult.rows[0].id;
 
-  // Insert domains
-  const insertDomain = db.prepare(`
-    INSERT INTO task_domains (task_id, domain, status)
-    VALUES (?, ?, 'pending')
-  `);
-
-  const insertMany = db.transaction((domains) => {
-    for (const domain of domains) {
-      insertDomain.run(taskId, domain.trim().toLowerCase());
-    }
-  });
-  insertMany(domains);
+  for (const domain of domains) {
+    await pool.query(
+      `INSERT INTO task_domains (task_id, domain, status) VALUES ($1, $2, 'pending')`,
+      [taskId, domain.trim().toLowerCase()]
+    );
+  }
 
   return { id: taskId, name, total_domains: domains.length, status: 'pending' };
 }
 
 /**
  * Get all tasks with optional filtering
- * @param {Object} options - Filter options
- * @returns {Array} Tasks array
  */
-function getTasks(options = {}) {
+async function getTasks(options = {}) {
   let query = 'SELECT * FROM tasks WHERE 1=1';
   const params = [];
+  let paramIndex = 1;
 
   if (options.status && options.status !== 'all') {
-    query += ' AND status = ?';
+    query += ` AND status = $${paramIndex}`;
     params.push(options.status);
+    paramIndex++;
   }
 
   if (options.search) {
-    query += ' AND name LIKE ?';
+    query += ` AND name LIKE $${paramIndex}`;
     params.push(`%${options.search}%`);
+    paramIndex++;
   }
 
   query += ' ORDER BY created_at DESC';
 
   if (options.limit) {
-    query += ' LIMIT ?';
+    query += ` LIMIT $${paramIndex}`;
     params.push(options.limit);
+    paramIndex++;
     if (options.offset) {
-      query += ' OFFSET ?';
+      query += ` OFFSET $${paramIndex}`;
       params.push(options.offset);
+      paramIndex++;
     }
   }
 
-  return db.prepare(query).all(...params);
+  const result = await pool.query(query, params);
+  return result.rows;
 }
 
 /**
  * Get a single task by ID
- * @param {number} taskId - Task ID
- * @returns {Object|null} Task data
  */
-function getTask(taskId) {
-  return db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId);
+async function getTask(taskId) {
+  const result = await pool.query('SELECT * FROM tasks WHERE id = $1', [taskId]);
+  return result.rows[0];
 }
 
 /**
  * Get all domains for a task
- * @param {number} taskId - Task ID
- * @param {string} status - Optional status filter
- * @returns {Array} Task domains
  */
-function getTaskDomains(taskId, status = null) {
+async function getTaskDomains(taskId, status = null) {
   if (status) {
-    return db.prepare('SELECT * FROM task_domains WHERE task_id = ? AND status = ? ORDER BY id').all(taskId, status);
+    const result = await pool.query(
+      'SELECT * FROM task_domains WHERE task_id = $1 AND status = $2 ORDER BY id',
+      [taskId, status]
+    );
+    return result.rows;
   }
-  return db.prepare('SELECT * FROM task_domains WHERE task_id = ? ORDER BY id').all(taskId);
+  const result = await pool.query(
+    'SELECT * FROM task_domains WHERE task_id = $1 ORDER BY id',
+    [taskId]
+  );
+  return result.rows;
 }
 
 /**
  * Update task status
- * @param {number} taskId - Task ID
- * @param {string} status - New status
  */
-function updateTaskStatus(taskId, status) {
-  const updates = { status };
-
+async function updateTaskStatus(taskId, status) {
   if (status === 'running') {
-    db.prepare('UPDATE tasks SET status = ?, started_at = COALESCE(started_at, CURRENT_TIMESTAMP), paused_at = NULL WHERE id = ?')
-      .run(status, taskId);
+    await pool.query(
+      'UPDATE tasks SET status = $1, started_at = COALESCE(started_at, CURRENT_TIMESTAMP), paused_at = NULL WHERE id = $2',
+      [status, taskId]
+    );
   } else if (status === 'paused') {
-    db.prepare('UPDATE tasks SET status = ?, paused_at = CURRENT_TIMESTAMP WHERE id = ?')
-      .run(status, taskId);
+    await pool.query(
+      'UPDATE tasks SET status = $1, paused_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [status, taskId]
+    );
   } else if (status === 'completed' || status === 'cancelled') {
-    db.prepare('UPDATE tasks SET status = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?')
-      .run(status, taskId);
+    await pool.query(
+      'UPDATE tasks SET status = $1, completed_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [status, taskId]
+    );
   } else {
-    db.prepare('UPDATE tasks SET status = ? WHERE id = ?').run(status, taskId);
+    await pool.query('UPDATE tasks SET status = $1 WHERE id = $2', [status, taskId]);
   }
 }
 
 /**
  * Update a task domain's status and result
- * @param {number} domainId - Task domain ID
- * @param {string} status - New status ('running', 'completed', 'no_result', 'failed', 'skipped')
- * @param {Object} result - Optional result data
  */
-function updateTaskDomain(domainId, status, result = null) {
+async function updateTaskDomain(domainId, status, result = null) {
   if (status === 'running') {
-    db.prepare('UPDATE task_domains SET status = ?, started_at = CURRENT_TIMESTAMP WHERE id = ?')
-      .run(status, domainId);
+    await pool.query(
+      'UPDATE task_domains SET status = $1, started_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [status, domainId]
+    );
   } else if (status === 'completed' && result) {
-    db.prepare(`
+    await pool.query(`
       UPDATE task_domains SET
-        status = ?,
-        guest_post_price = ?,
-        casino_price = ?,
-        currency = ?,
-        contact_email = ?,
-        confidence = ?,
+        status = $1,
+        guest_post_price = $2,
+        casino_price = $3,
+        currency = $4,
+        contact_email = $5,
+        confidence = $6,
         completed_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `).run(status, result.guest_post_price, result.casino_price, result.currency, result.source_email, result.confidence, domainId);
+      WHERE id = $7
+    `, [status, result.guest_post_price, result.casino_price, result.currency, result.source_email, result.confidence, domainId]);
   } else if (status === 'no_result') {
-    // No price found - search completed but nothing found
-    db.prepare('UPDATE task_domains SET status = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?')
-      .run(status, domainId);
+    await pool.query(
+      'UPDATE task_domains SET status = $1, completed_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [status, domainId]
+    );
   } else if (status === 'failed') {
-    db.prepare('UPDATE task_domains SET status = ?, error_message = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?')
-      .run(status, result?.error || 'Unknown error', domainId);
+    await pool.query(
+      'UPDATE task_domains SET status = $1, error_message = $2, completed_at = CURRENT_TIMESTAMP WHERE id = $3',
+      [status, result?.error || 'Unknown error', domainId]
+    );
   } else {
-    db.prepare('UPDATE task_domains SET status = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?')
-      .run(status, domainId);
+    await pool.query(
+      'UPDATE task_domains SET status = $1, completed_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [status, domainId]
+    );
   }
 }
 
 /**
  * Increment task progress counters
- * @param {number} taskId - Task ID
- * @param {string} type - 'successful', 'no_result', or 'failed'
  */
-function incrementTaskProgress(taskId, type) {
+async function incrementTaskProgress(taskId, type) {
   if (type === 'successful') {
-    db.prepare('UPDATE tasks SET completed_domains = completed_domains + 1, successful_domains = successful_domains + 1 WHERE id = ?')
-      .run(taskId);
+    await pool.query(
+      'UPDATE tasks SET completed_domains = completed_domains + 1, successful_domains = successful_domains + 1 WHERE id = $1',
+      [taskId]
+    );
   } else if (type === 'no_result') {
-    db.prepare('UPDATE tasks SET completed_domains = completed_domains + 1, no_result_domains = no_result_domains + 1 WHERE id = ?')
-      .run(taskId);
+    await pool.query(
+      'UPDATE tasks SET completed_domains = completed_domains + 1, no_result_domains = no_result_domains + 1 WHERE id = $1',
+      [taskId]
+    );
   } else if (type === 'failed') {
-    db.prepare('UPDATE tasks SET completed_domains = completed_domains + 1, failed_domains = failed_domains + 1 WHERE id = ?')
-      .run(taskId);
+    await pool.query(
+      'UPDATE tasks SET completed_domains = completed_domains + 1, failed_domains = failed_domains + 1 WHERE id = $1',
+      [taskId]
+    );
   }
 }
 
 /**
  * Reset failed domains to pending for retry
- * @param {number} taskId - Task ID
- * @returns {number} Number of domains reset
  */
-function retryFailedDomains(taskId) {
-  const result = db.prepare(`
+async function retryFailedDomains(taskId) {
+  const result = await pool.query(`
     UPDATE task_domains
     SET status = 'pending', error_message = NULL, started_at = NULL, completed_at = NULL
-    WHERE task_id = ? AND status = 'failed'
-  `).run(taskId);
+    WHERE task_id = $1 AND status = 'failed'
+  `, [taskId]);
 
-  // Update task counters
-  db.prepare(`
+  const changes = result.rowCount;
+
+  await pool.query(`
     UPDATE tasks
-    SET completed_domains = completed_domains - ?,
+    SET completed_domains = completed_domains - $1,
         failed_domains = 0,
         status = CASE WHEN status = 'completed' THEN 'pending' ELSE status END
-    WHERE id = ?
-  `).run(result.changes, taskId);
+    WHERE id = $2
+  `, [changes, taskId]);
 
-  return result.changes;
+  return changes;
 }
 
 /**
  * Mark remaining pending domains as skipped (for cancel)
- * @param {number} taskId - Task ID
  */
-function skipRemainingDomains(taskId) {
-  db.prepare(`
+async function skipRemainingDomains(taskId) {
+  await pool.query(`
     UPDATE task_domains
     SET status = 'skipped', completed_at = CURRENT_TIMESTAMP
-    WHERE task_id = ? AND status IN ('pending', 'running')
-  `).run(taskId);
+    WHERE task_id = $1 AND status IN ('pending', 'running')
+  `, [taskId]);
 }
 
 /**
  * Delete a task and its domains
- * @param {number} taskId - Task ID
  */
-function deleteTask(taskId) {
-  db.prepare('DELETE FROM task_domains WHERE task_id = ?').run(taskId);
-  db.prepare('DELETE FROM tasks WHERE id = ?').run(taskId);
+async function deleteTask(taskId) {
+  await pool.query('DELETE FROM task_domains WHERE task_id = $1', [taskId]);
+  await pool.query('DELETE FROM tasks WHERE id = $1', [taskId]);
 }
 
 /**
  * Get task count
- * @param {Object} options - Filter options
- * @returns {number} Total count
  */
-function getTaskCount(options = {}) {
+async function getTaskCount(options = {}) {
   let query = 'SELECT COUNT(*) as count FROM tasks WHERE 1=1';
   const params = [];
+  let paramIndex = 1;
 
   if (options.status && options.status !== 'all') {
-    query += ' AND status = ?';
+    query += ` AND status = $${paramIndex}`;
     params.push(options.status);
+    paramIndex++;
   }
 
-  return db.prepare(query).get(...params).count;
+  const result = await pool.query(query, params);
+  return parseInt(result.rows[0].count);
 }
 
 /**
  * Export task results to CSV
- * @param {number} taskId - Task ID
- * @returns {string} CSV string
  */
-function exportTaskToCsv(taskId) {
-  const domains = getTaskDomains(taskId);
+async function exportTaskToCsv(taskId) {
+  const domains = await getTaskDomains(taskId);
 
   if (domains.length === 0) return '';
 
@@ -995,14 +906,8 @@ function exportTaskToCsv(taskId) {
   };
 
   const rows = domains.map(d => [
-    d.domain,
-    d.status,
-    d.guest_post_price,
-    d.casino_price,
-    d.currency,
-    d.contact_email,
-    d.confidence,
-    d.error_message
+    d.domain, d.status, d.guest_post_price, d.casino_price,
+    d.currency, d.contact_email, d.confidence, d.error_message
   ].map(escapeCSV).join(','));
 
   return [headers.join(','), ...rows].join('\n');
@@ -1014,94 +919,85 @@ function exportTaskToCsv(taskId) {
 
 /**
  * Create a new user
- * @param {string} username - Username
- * @param {string} passwordHash - Hashed password
- * @returns {Object} Created user
  */
-function createUser(username, passwordHash) {
-  const stmt = db.prepare(`
-    INSERT INTO users (username, password_hash)
-    VALUES (?, ?)
-  `);
-  const result = stmt.run(username, passwordHash);
-  return { id: result.lastInsertRowid, username };
+async function createUser(username, passwordHash) {
+  const result = await pool.query(
+    `INSERT INTO users (username, password_hash) VALUES ($1, $2) RETURNING id`,
+    [username, passwordHash]
+  );
+  return { id: result.rows[0].id, username };
 }
 
 /**
  * Get user by username
- * @param {string} username - Username
- * @returns {Object|null} User data
  */
-function getUserByUsername(username) {
-  return db.prepare('SELECT * FROM users WHERE username = ?').get(username);
+async function getUserByUsername(username) {
+  const result = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+  return result.rows[0];
 }
 
 /**
  * Get user by ID
- * @param {number} userId - User ID
- * @returns {Object|null} User data
  */
-function getUserById(userId) {
-  return db.prepare('SELECT id, username, created_at, last_login FROM users WHERE id = ?').get(userId);
+async function getUserById(userId) {
+  const result = await pool.query(
+    'SELECT id, username, created_at, last_login FROM users WHERE id = $1',
+    [userId]
+  );
+  return result.rows[0];
 }
 
 /**
  * Update user's last login time
- * @param {number} userId - User ID
  */
-function updateLastLogin(userId) {
-  db.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?').run(userId);
+async function updateLastLogin(userId) {
+  await pool.query('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1', [userId]);
 }
 
 /**
  * Create a session
- * @param {string} sessionId - Session ID (UUID)
- * @param {number} userId - User ID
- * @param {number} expiresInHours - Hours until expiration (default 24)
  */
-function createAuthSession(sessionId, userId, expiresInHours = 24) {
+async function createAuthSession(sessionId, userId, expiresInHours = 24) {
   const expiresAt = new Date(Date.now() + expiresInHours * 60 * 60 * 1000).toISOString();
-  db.prepare(`
-    INSERT INTO sessions (id, user_id, expires_at)
-    VALUES (?, ?, ?)
-  `).run(sessionId, userId, expiresAt);
+  await pool.query(
+    `INSERT INTO sessions (id, user_id, expires_at) VALUES ($1, $2, $3)`,
+    [sessionId, userId, expiresAt]
+  );
 }
 
 /**
  * Get session with user data
- * @param {string} sessionId - Session ID
- * @returns {Object|null} Session with user data
  */
-function getAuthSession(sessionId) {
-  return db.prepare(`
+async function getAuthSession(sessionId) {
+  const result = await pool.query(`
     SELECT s.*, u.username
     FROM sessions s
     JOIN users u ON s.user_id = u.id
-    WHERE s.id = ? AND s.expires_at > datetime('now')
-  `).get(sessionId);
+    WHERE s.id = $1 AND s.expires_at > NOW()
+  `, [sessionId]);
+  return result.rows[0];
 }
 
 /**
  * Delete a session (logout)
- * @param {string} sessionId - Session ID
  */
-function deleteAuthSession(sessionId) {
-  db.prepare('DELETE FROM sessions WHERE id = ?').run(sessionId);
+async function deleteAuthSession(sessionId) {
+  await pool.query('DELETE FROM sessions WHERE id = $1', [sessionId]);
 }
 
 /**
  * Clean up expired sessions
  */
-function cleanupExpiredSessions() {
-  db.prepare("DELETE FROM sessions WHERE expires_at < datetime('now')").run();
+async function cleanupExpiredSessions() {
+  await pool.query("DELETE FROM sessions WHERE expires_at < NOW()");
 }
 
 /**
  * Get user count
- * @returns {number} Number of users
  */
-function getUserCount() {
-  return db.prepare('SELECT COUNT(*) as count FROM users').get().count;
+async function getUserCount() {
+  const result = await pool.query('SELECT COUNT(*) as count FROM users');
+  return parseInt(result.rows[0].count);
 }
 
 module.exports = {
