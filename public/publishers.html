@@ -534,6 +534,17 @@
               <option value="no">No Casino</option>
             </select>
 
+            <select id="price-status-filter" class="filter-select">
+              <option value="all">All Price Status</option>
+              <option value="yes">Has Price</option>
+              <option value="no">No Price (Outreach)</option>
+            </select>
+
+            <select id="task-filter" class="filter-select">
+              <option value="all">All Tasks</option>
+              <!-- Tasks will be loaded dynamically -->
+            </select>
+
             <label style="display: flex; align-items: center; gap: 0.5rem; color: var(--text-secondary); cursor: pointer;">
               <input type="checkbox" id="favorites-only"> Favorites only
             </label>
@@ -677,6 +688,8 @@
     const dateFrom = document.getElementById('date-from');
     const dateTo = document.getElementById('date-to');
     const favoritesOnly = document.getElementById('favorites-only');
+    const priceStatusFilter = document.getElementById('price-status-filter');
+    const taskFilter = document.getElementById('task-filter');
     const clearFiltersBtn = document.getElementById('clear-filters');
     const exportBtn = document.getElementById('export-btn');
     const publishersBody = document.getElementById('publishers-body');
@@ -717,13 +730,34 @@
     // Load publishers on page load
     document.addEventListener('DOMContentLoaded', () => {
       loadCurrentUser();
+      loadTasks();
       loadPublishers();
       loadStats();
     });
 
+    // Load tasks into the task filter dropdown
+    async function loadTasks() {
+      try {
+        const response = await fetch('/api/tasks');
+        const data = await response.json();
+
+        taskFilter.innerHTML = '<option value="all">All Tasks</option>';
+        data.tasks.forEach(task => {
+          const option = document.createElement('option');
+          option.value = task.id;
+          option.textContent = `${task.name} (${task.successful_domains}/${task.total_domains})`;
+          taskFilter.appendChild(option);
+        });
+      } catch (error) {
+        console.error('Error loading tasks:', error);
+      }
+    }
+
     // Event Listeners
     searchInput.addEventListener('input', debounceSearch);
     casinoFilter.addEventListener('change', () => { currentPage = 1; loadPublishers(); });
+    priceStatusFilter.addEventListener('change', () => { currentPage = 1; loadPublishers(); });
+    taskFilter.addEventListener('change', () => { currentPage = 1; loadPublishers(); });
     minGpPrice.addEventListener('change', () => { currentPage = 1; loadPublishers(); });
     maxGpPrice.addEventListener('change', () => { currentPage = 1; loadPublishers(); });
     minLiPrice.addEventListener('change', () => { currentPage = 1; loadPublishers(); });
@@ -803,6 +837,10 @@
       if (dateTo.value) params.set('dateTo', dateTo.value);
       // Favorites
       if (favoritesOnly.checked) params.set('favorites', 'true');
+      // Price status filter
+      if (priceStatusFilter.value !== 'all') params.set('hasPrice', priceStatusFilter.value);
+      // Task filter
+      if (taskFilter.value !== 'all') params.set('taskId', taskFilter.value);
 
       try {
         const response = await fetch(`/api/publishers?${params}`);
@@ -928,6 +966,8 @@
     function clearFilters() {
       searchInput.value = '';
       casinoFilter.value = 'all';
+      priceStatusFilter.value = 'all';
+      taskFilter.value = 'all';
       minGpPrice.value = '';
       maxGpPrice.value = '';
       minLiPrice.value = '';
@@ -1032,6 +1072,10 @@
       if (dateTo.value) params.set('dateTo', dateTo.value);
       // Favorites filter
       if (favoritesOnly.checked) params.set('favorites', 'true');
+      // Price status filter
+      if (priceStatusFilter.value !== 'all') params.set('hasPrice', priceStatusFilter.value);
+      // Task filter
+      if (taskFilter.value !== 'all') params.set('taskId', taskFilter.value);
 
       window.location.href = `/api/publishers/export?${params}`;
     }

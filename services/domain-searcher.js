@@ -571,14 +571,16 @@ async function searchDomain(domain, accounts) {
     return null;
   }
 
-  // Pick the best price based on priority score, then recency
+  // Pick the best price based on recency (latest email date), then priority score as tiebreaker
   foundPrices.sort((a, b) => {
-    // Higher priority score first
-    if (b.priorityScore !== a.priorityScore) {
-      return b.priorityScore - a.priorityScore;
+    // More recent date first (latest email wins)
+    const dateA = a.emailDate ? new Date(a.emailDate).getTime() : 0;
+    const dateB = b.emailDate ? new Date(b.emailDate).getTime() : 0;
+    if (dateB !== dateA) {
+      return dateB - dateA;
     }
-    // More recent date first
-    return (b.emailDate || 0) - (a.emailDate || 0);
+    // If same date, higher priority score wins
+    return b.priorityScore - a.priorityScore;
   });
 
   const bestResult = foundPrices[0];

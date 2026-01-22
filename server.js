@@ -365,6 +365,10 @@ app.get('/api/publishers', (req, res) => {
       dateFrom: req.query.dateFrom || undefined,
       dateTo: req.query.dateTo || undefined,
       favoritesOnly: req.query.favorites === 'true',
+      // Has price filter ('yes', 'no', or undefined for all)
+      hasPrice: req.query.hasPrice || undefined,
+      // Task filter (filter by task ID)
+      taskId: req.query.taskId ? parseInt(req.query.taskId) : undefined,
       sortBy: req.query.sortBy,
       sortOrder: req.query.sortOrder,
       limit: req.query.limit ? parseInt(req.query.limit) : undefined,
@@ -422,6 +426,8 @@ app.get('/api/publishers/export', (req, res) => {
       dateFrom: req.query.dateFrom || undefined,
       dateTo: req.query.dateTo || undefined,
       favoritesOnly: req.query.favorites === 'true',
+      hasPrice: req.query.hasPrice || undefined,
+      taskId: req.query.taskId ? parseInt(req.query.taskId) : undefined,
       sortBy: req.query.sortBy || 'domain',
       sortOrder: req.query.sortOrder || 'asc'
     };
@@ -930,20 +936,25 @@ async function runTask(taskId) {
       // Search for the domain
       const result = await searchDomain(domain, accounts);
 
-      if (result) {
-        // Update domain with result
+      // Check if we found any pricing data
+      const hasPricing = result && (
+        result.guest_post_price || result.link_insertion_price ||
+        result.sponsored_post_price || result.homepage_link_price || result.casino_price
+      );
+
+      if (hasPricing) {
+        // Found price - mark as completed (success)
         db.updateTaskDomain(domainRecord.id, 'completed', result);
         db.incrementTaskProgress(taskId, 'successful');
-
-        // Also save to publisher master list
-        db.savePublisher(result);
-
+        db.savePublisher(result, taskId);
         console.log(`Task ${taskId}: Found price for ${domain}: ${result.guest_post_price} ${result.currency}`);
       } else {
-        // No price found - mark as completed but with no data
-        db.updateTaskDomain(domainRecord.id, 'completed', { guest_post_price: null });
-        db.incrementTaskProgress(taskId, 'successful');
-        console.log(`Task ${taskId}: No price found for ${domain}`);
+        // No price found - mark as no_result (not failed, just no data)
+        db.updateTaskDomain(domainRecord.id, 'no_result', { guest_post_price: null });
+        db.incrementTaskProgress(taskId, 'no_result');
+        // Still save to publishers for manual outreach
+        db.savePublisher({ domain }, taskId);
+        console.log(`Task ${taskId}: No price found for ${domain} (added to publishers for outreach)`);
       }
     } catch (error) {
       console.error(`Task ${taskId}: Error processing ${domain}:`, error.message);

@@ -78,9 +78,17 @@ function init() {
         last_refreshed TEXT DEFAULT CURRENT_TIMESTAMP,
         search_count INTEGER DEFAULT 1,
         is_favorite INTEGER DEFAULT 0,
-        tags TEXT
+        tags TEXT,
+        last_task_id INTEGER
       )
     `);
+
+    // Add last_task_id column if it doesn't exist (migration)
+    try {
+      db.exec('ALTER TABLE publishers ADD COLUMN last_task_id INTEGER');
+    } catch (e) {
+      // Column already exists
+    }
 
     // Tasks table - batch domain searches
     db.exec(`
@@ -91,6 +99,7 @@ function init() {
         total_domains INTEGER DEFAULT 0,
         completed_domains INTEGER DEFAULT 0,
         successful_domains INTEGER DEFAULT 0,
+        no_result_domains INTEGER DEFAULT 0,
         failed_domains INTEGER DEFAULT 0,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
         started_at TEXT,
@@ -98,6 +107,13 @@ function init() {
         paused_at TEXT
       )
     `);
+
+    // Add no_result_domains column if it doesn't exist (migration)
+    try {
+      db.exec('ALTER TABLE tasks ADD COLUMN no_result_domains INTEGER DEFAULT 0');
+    } catch (e) {
+      // Column already exists
+    }
 
     // Task domains table - individual domains within a task
     db.exec(`
@@ -315,9 +331,15 @@ function close() {
 
 /**
  * Save or update a publisher in the master list
- * @param {Object} result - Search result data
+ * @param {Object} result - Search result data (can be just {domain} for no-result cases)
+ * @param {number} taskId - Optional task ID that found this publisher
  */
-function savePublisher(result) {
+function savePublisher(result, taskId = null) {
+  if (!result || !result.domain) {
+    console.log('savePublisher: No domain provided, skipping');
+    return;
+  }
+
   // Extract contact name from email if present
   const contactName = result.source_email ?
     result.source_email.match(/^([^<]+)</)?.[1]?.trim() || null : null;
@@ -327,6 +349,10 @@ function savePublisher(result) {
   // Check if publisher exists
   const existing = db.prepare('SELECT * FROM publishers WHERE domain = ?').get(result.domain);
 
+  // Check if new result has any pricing data
+  const hasNewPricing = result.guest_post_price || result.link_insertion_price ||
+    result.sponsored_post_price || result.homepage_link_price || result.casino_price;
+
   if (existing) {
     // Confidence ranking: high > medium > low
     const confidenceRank = { 'high': 3, 'medium': 2, 'low': 1 };
@@ -334,10 +360,11 @@ function savePublisher(result) {
     const newRank = confidenceRank[result.confidence] || 0;
 
     // Only update pricing if:
-    // 1. New confidence is equal or better, OR
-    // 2. Existing has no price but new one does
-    const shouldUpdatePricing = newRank >= existingRank ||
-      (existing.guest_post_price === null && result.guest_post_price !== null);
+    // 1. New result has pricing AND (new confidence >= existing OR existing has no price)
+    const shouldUpdatePricing = hasNewPricing && (
+      newRank >= existingRank ||
+      existing.guest_post_price === null
+    );
 
     if (shouldUpdatePricing) {
       // Update with new data (better or equal source)
@@ -357,7 +384,8 @@ function savePublisher(result) {
           notes = COALESCE(?, notes),
           last_updated = CURRENT_TIMESTAMP,
           last_refreshed = CURRENT_TIMESTAMP,
-          search_count = search_count + 1
+          search_count = search_count + 1,
+          last_task_id = COALESCE(?, last_task_id)
         WHERE domain = ?
       `);
       stmt.run(
@@ -373,43 +401,49 @@ function savePublisher(result) {
         result.account,
         result.confidence,
         result.notes,
+        taskId,
         result.domain
       );
     } else {
-      // Keep existing better data, only update search count and refresh timestamp
+      // Keep existing data, only update search count, refresh timestamp, and task_id
       const stmt = db.prepare(`
         UPDATE publishers SET
           last_refreshed = CURRENT_TIMESTAMP,
-          search_count = search_count + 1
+          search_count = search_count + 1,
+          last_task_id = COALESCE(?, last_task_id)
         WHERE domain = ?
       `);
-      stmt.run(result.domain);
-      console.log(`Kept existing ${existing.confidence} data for ${result.domain} (new: ${result.confidence})`);
+      stmt.run(taskId, result.domain);
+      if (hasNewPricing) {
+        console.log(`Kept existing ${existing.confidence} data for ${result.domain} (new: ${result.confidence})`);
+      }
     }
   } else {
-    // Insert new publisher
+    // Insert new publisher (even without pricing - for manual outreach)
     const stmt = db.prepare(`
       INSERT INTO publishers (
         domain, guest_post_price, link_insertion_price, sponsored_post_price,
         homepage_link_price, casino_price, casino_accepted, currency,
-        contact_email, contact_name, source_account, confidence, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        contact_email, contact_name, source_account, confidence, notes, last_task_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     stmt.run(
       result.domain,
-      result.guest_post_price,
-      result.link_insertion_price,
-      result.sponsored_post_price,
-      result.homepage_link_price,
-      result.casino_price,
-      result.casino_accepted || 'no',
+      result.guest_post_price || null,
+      result.link_insertion_price || null,
+      result.sponsored_post_price || null,
+      result.homepage_link_price || null,
+      result.casino_price || null,
+      result.casino_accepted || 'unknown',
       result.currency || 'USD',
-      contactEmail,
-      contactName,
-      result.account,
-      result.confidence,
-      result.notes
+      contactEmail || null,
+      contactName || null,
+      result.account || null,
+      result.confidence || null,
+      result.notes || null,
+      taskId
     );
+    console.log(`Added new publisher: ${result.domain} (${hasNewPricing ? 'with pricing' : 'no pricing - for outreach'})`);
   }
 }
 
@@ -478,6 +512,19 @@ function getPublishers(options = {}) {
   // Favorites filter
   if (options.favoritesOnly) {
     query += ' AND is_favorite = 1';
+  }
+
+  // Has price filter (for filtering publishers with/without pricing)
+  if (options.hasPrice === 'yes') {
+    query += ' AND (guest_post_price IS NOT NULL OR link_insertion_price IS NOT NULL OR casino_price IS NOT NULL)';
+  } else if (options.hasPrice === 'no') {
+    query += ' AND guest_post_price IS NULL AND link_insertion_price IS NULL AND casino_price IS NULL';
+  }
+
+  // Task filter (filter by which task found this publisher)
+  if (options.taskId) {
+    query += ' AND last_task_id = ?';
+    params.push(options.taskId);
   }
 
   // Sorting
@@ -561,6 +608,19 @@ function getPublisherCount(options = {}) {
 
   if (options.favoritesOnly) {
     query += ' AND is_favorite = 1';
+  }
+
+  // Has price filter
+  if (options.hasPrice === 'yes') {
+    query += ' AND (guest_post_price IS NOT NULL OR link_insertion_price IS NOT NULL OR casino_price IS NOT NULL)';
+  } else if (options.hasPrice === 'no') {
+    query += ' AND guest_post_price IS NULL AND link_insertion_price IS NULL AND casino_price IS NULL';
+  }
+
+  // Task filter
+  if (options.taskId) {
+    query += ' AND last_task_id = ?';
+    params.push(options.taskId);
   }
 
   return db.prepare(query).get(...params).count;
@@ -797,7 +857,7 @@ function updateTaskStatus(taskId, status) {
 /**
  * Update a task domain's status and result
  * @param {number} domainId - Task domain ID
- * @param {string} status - New status
+ * @param {string} status - New status ('running', 'completed', 'no_result', 'failed', 'skipped')
  * @param {Object} result - Optional result data
  */
 function updateTaskDomain(domainId, status, result = null) {
@@ -816,6 +876,10 @@ function updateTaskDomain(domainId, status, result = null) {
         completed_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(status, result.guest_post_price, result.casino_price, result.currency, result.source_email, result.confidence, domainId);
+  } else if (status === 'no_result') {
+    // No price found - search completed but nothing found
+    db.prepare('UPDATE task_domains SET status = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(status, domainId);
   } else if (status === 'failed') {
     db.prepare('UPDATE task_domains SET status = ?, error_message = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?')
       .run(status, result?.error || 'Unknown error', domainId);
@@ -828,11 +892,14 @@ function updateTaskDomain(domainId, status, result = null) {
 /**
  * Increment task progress counters
  * @param {number} taskId - Task ID
- * @param {string} type - 'successful' or 'failed'
+ * @param {string} type - 'successful', 'no_result', or 'failed'
  */
 function incrementTaskProgress(taskId, type) {
   if (type === 'successful') {
     db.prepare('UPDATE tasks SET completed_domains = completed_domains + 1, successful_domains = successful_domains + 1 WHERE id = ?')
+      .run(taskId);
+  } else if (type === 'no_result') {
+    db.prepare('UPDATE tasks SET completed_domains = completed_domains + 1, no_result_domains = no_result_domains + 1 WHERE id = ?')
       .run(taskId);
   } else if (type === 'failed') {
     db.prepare('UPDATE tasks SET completed_domains = completed_domains + 1, failed_domains = failed_domains + 1 WHERE id = ?')

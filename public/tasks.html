@@ -706,6 +706,7 @@
     }
 
     .domain-status-icon.completed { color: var(--success); }
+    .domain-status-icon.no_result { color: #f59e0b; }
     .domain-status-icon.failed { color: var(--danger); }
     .domain-status-icon.running { color: var(--primary); }
     .domain-status-icon.pending { color: var(--text-muted); }
@@ -1145,6 +1146,14 @@
                 </svg>
                 ${task.successful_domains} found
               </span>
+              <span class="stat-item no-result" style="color: #f59e0b;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="8" x2="12" y2="12"></line>
+                  <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+                ${task.no_result_domains || 0} no price
+              </span>
               <span class="stat-item failed">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -1413,6 +1422,10 @@
           } else {
             result = `<span style="color: var(--text-muted)">No price found</span>`;
           }
+          break;
+        case 'no_result':
+          statusIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: #f59e0b;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>`;
+          result = `<span style="color: #f59e0b;">No price found (added for outreach)</span>`;
           break;
         case 'failed':
           statusIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;

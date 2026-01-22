@@ -262,6 +262,54 @@ function normalizeNeedsReview(needsReview, confidence) {
 }
 
 /**
+ * Finds the highest price associated with a specific domain in the content
+ * Used to override GPT extraction when domain appears in multiple sheets with different prices
+ *
+ * @param {string} content - The email/sheet content
+ * @param {string} targetDomain - The domain to find prices for
+ * @returns {number|null} The highest price found, or null if none found
+ */
+function findHighestPriceForDomain(content, targetDomain) {
+  if (!content || !targetDomain) return null;
+
+  const domainLower = targetDomain.toLowerCase();
+  const lines = content.split('\n');
+  const prices = [];
+
+  for (const line of lines) {
+    // Check if this line contains the target domain
+    if (!line.toLowerCase().includes(domainLower)) continue;
+
+    // Extract all prices with currency symbols from this line
+    // Match patterns like €500, $300, £200, 500 EUR, etc.
+    const pricePatterns = [
+      /€\s*(\d+(?:\.\d{2})?)/g,
+      /\$\s*(\d+(?:\.\d{2})?)/g,
+      /£\s*(\d+(?:\.\d{2})?)/g,
+      /(\d+(?:\.\d{2})?)\s*(?:EUR|USD|GBP)/gi
+    ];
+
+    for (const pattern of pricePatterns) {
+      let match;
+      while ((match = pattern.exec(line)) !== null) {
+        const price = parseFloat(match[1]);
+        // Filter out likely DA/DR values (1-100) and traffic numbers (very large)
+        if (price > 100 && price < 10000) {
+          prices.push(price);
+        }
+      }
+    }
+  }
+
+  if (prices.length === 0) return null;
+
+  // Return the highest price found
+  const highest = Math.max(...prices);
+  console.log(`  → Found ${prices.length} prices for ${targetDomain}: [${prices.join(', ')}] → highest: ${highest}`);
+  return highest;
+}
+
+/**
  * Validates that an extracted price actually appears in the email content
  * This prevents AI hallucination of prices that don't exist
  * STRICT: Requires price to appear with currency indicator to avoid DA/DR confusion
@@ -502,6 +550,32 @@ PRICING TYPES TO LOOK FOR:
 - Link Insertion / LI: Adding a link to existing content
 - Casino/Gambling/Forex/CBD/Crypto Price: Special pricing for restricted niches (OFTEN HIGHER than general price)
 
+CRITICAL - PRICE DURATION RULES (VERY IMPORTANT):
+- Sheets/tables often have multiple price columns: "1 Year Price" and "Permanent Price" (or "Lifetime", "Forever", "Perm")
+- YOU MUST ALWAYS extract the "PERMANENT" or "LIFETIME" price - NEVER the "1 Year" or time-limited price
+- Example: If you see "1 Year: €300" and "Permanent: €500" for the same domain, use €500 (PERMANENT price)
+- The permanent price is typically HIGHER than the 1 year price (often 1.5x-2x more)
+- Look for column headers like: "Permanent", "Perm", "Lifetime", "Forever", "Permanent Price"
+- IGNORE columns labeled: "1 Year", "1Y", "12 Months", "Annual"
+
+COLUMN POSITION PATTERN (for sheets without clear headers):
+- Common pattern: Domain | Niche | DA | Traffic | 1Y Price | Status | Casino 1Y | PERMANENT | ... | Casino Status
+- When you see multiple prices in a row (e.g., "€300 | Available | €250 | €500"), the LATER/HIGHER price (€500) is usually PERMANENT
+- If you see 3-4 prices in sequence, typically: [1 Year GP] [Casino 1Y] [Permanent GP] [Permanent Casino]
+- ALWAYS prefer the HIGHER price when two similar-type prices exist (higher = permanent)
+- If a row shows: "€300 | Available | €250 | €500" → guest_post_price=500 (permanent), casino may be similar or use GP price
+
+- If only one price column exists without duration label, use that price
+- In your notes, specify which price you extracted and why (e.g., "Used €500 permanent price, ignored €300 1-year price")
+
+DUPLICATE DOMAIN ENTRIES - CRITICAL (same domain appears multiple times):
+- When a domain appears in MULTIPLE rows/sheets with DIFFERENT prices, ALWAYS use the HIGHEST permanent price
+- Example: If sportotto.com shows €350 in one sheet and €500 in another, USE €500 (the higher one)
+- The HIGHEST price is almost always the correct/current permanent price
+- Sheets are organized by region (Swedish, Finnish, ROW) - prices may vary by market, use the HIGHEST
+- DO NOT use the first occurrence - scan ALL occurrences and pick the HIGHEST permanent price
+- In notes, mention: "Found multiple prices (€350, €500), using highest permanent price €500"
+
 CRITICAL - DO NOT CONFUSE METRICS WITH PRICES:
 - DA (Domain Authority) and DR (Domain Rating) are METRICS, NOT PRICES! They range 1-100 and measure website authority
 - If you see columns like "DA", "DR", "Domain Authority", "Domain Rating", "Traffic", "TF", "CF" - these are NOT prices!
@@ -516,9 +590,10 @@ CRITICAL CASINO PRICE RULES:
 - The casino price is OFTEN different (usually HIGHER, like 2x-5x) than the general price
 - If you see TWO different prices for the same domain (e.g., "$20" and "$100"), the HIGHER one is likely the casino price
 - If there's NO explicit restriction saying "casino not accepted", "no gambling", "grey niche rejected" etc., then casino IS accepted
-- When casino is accepted but no separate price is explicitly stated: casino_price = same as guest_post_price
+- CRITICAL: If NO SEPARATE casino price column exists, set casino_price = guest_post_price (the general/permanent price)
 - ONLY set casino_accepted to "no" if there's explicit text rejecting casino/gambling content
 - ONLY set casino_price to null if casino is explicitly NOT accepted
+- Remember: Use the PERMANENT price for casino too (not 1-year price)
 
 OUTPUT FORMAT (JSON only):
 {
@@ -606,15 +681,26 @@ If ANY answer is NO, return {"found": false}`
       extracted.casino_price = null;
     }
 
-    // Normalize the data
-    const guestPostPrice = normalizePrice(extracted.guest_post_price);
+    // CODE-LEVEL OVERRIDE: Find highest price for this domain in content
+    // This handles cases where domain appears in multiple sheets with different prices
+    const highestPrice = findHighestPriceForDomain(emailContent, targetDomain);
+    let guestPostPrice = normalizePrice(extracted.guest_post_price);
+
+    if (highestPrice && highestPrice > guestPostPrice) {
+      console.log(`  → OVERRIDE: Found higher price €${highestPrice} for ${targetDomain} (GPT extracted €${guestPostPrice})`);
+      guestPostPrice = highestPrice;
+    }
+
     const linkInsertionPrice = normalizePrice(extracted.link_insertion_price);
     let casinoPrice = normalizePrice(extracted.casino_price);
     const casinoAccepted = extracted.casino_accepted?.toLowerCase() !== 'no';
 
-    // Apply casino price logic: if casino is accepted but no explicit price, use general price
-    if (casinoAccepted && !casinoPrice && guestPostPrice) {
-      casinoPrice = guestPostPrice;
+    // Apply casino price logic: if casino is accepted but no explicit price, use guest post price
+    // Also: if casino price is lower than guest post (likely 1-year price), upgrade to guest post (permanent)
+    if (casinoAccepted) {
+      if (!casinoPrice || casinoPrice < guestPostPrice) {
+        casinoPrice = guestPostPrice;
+      }
     }
 
     // If casino is not accepted, ensure price is null
