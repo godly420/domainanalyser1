@@ -1200,7 +1200,15 @@ forbes.com"></textarea>
       }
     });
 
+    let isCreatingTask = false;  // Prevent double submission
+
     async function createAndStartTask() {
+      // Prevent double submission
+      if (isCreatingTask) {
+        console.log('Task creation already in progress');
+        return;
+      }
+
       const domains = getDomains();
 
       if (domains.length === 0) {
@@ -1208,6 +1216,7 @@ forbes.com"></textarea>
         return;
       }
 
+      isCreatingTask = true;
       const searchBtn = document.getElementById('search-btn');
       searchBtn.disabled = true;
       searchBtn.innerHTML = `
@@ -1244,6 +1253,7 @@ forbes.com"></textarea>
         console.error('Error creating task:', error);
         alert('Failed to create task');
       } finally {
+        isCreatingTask = false;
         searchBtn.disabled = false;
         searchBtn.innerHTML = `
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

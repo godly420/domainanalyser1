@@ -1339,7 +1339,15 @@
       document.getElementById('newTaskModal').classList.remove('active');
     }
 
+    let isCreatingTask = false;  // Prevent double submission
+
     async function createTask(startImmediately) {
+      // Prevent double submission
+      if (isCreatingTask) {
+        console.log('Task creation already in progress');
+        return;
+      }
+
       const name = document.getElementById('taskName').value.trim();
       const domainsText = document.getElementById('taskDomains').value.trim();
 
@@ -1354,6 +1362,16 @@
         alert('Please enter at least one valid domain');
         return;
       }
+
+      // Set loading state
+      isCreatingTask = true;
+      const createBtn = document.querySelector('.modal-footer .task-btn:nth-child(2)');
+      const createStartBtn = document.querySelector('.modal-footer .task-btn.primary');
+      const originalCreateText = createBtn.innerHTML;
+      const originalStartText = createStartBtn.innerHTML;
+      createBtn.disabled = true;
+      createStartBtn.disabled = true;
+      createStartBtn.innerHTML = '<div class="spinner" style="width:14px;height:14px;"></div> Creating...';
 
       try {
         const response = await fetch('/api/tasks', {
@@ -1373,12 +1391,19 @@
 
         if (startImmediately) {
           await startTask(data.task.id);
+        } else {
+          loadTasks();  // Only call loadTasks if not starting (startTask already calls it)
         }
-
-        loadTasks();
       } catch (error) {
         console.error('Error creating task:', error);
         alert('Failed to create task');
+      } finally {
+        // Reset loading state
+        isCreatingTask = false;
+        createBtn.disabled = false;
+        createStartBtn.disabled = false;
+        createBtn.innerHTML = originalCreateText;
+        createStartBtn.innerHTML = originalStartText;
       }
     }
 

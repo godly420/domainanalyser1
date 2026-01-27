@@ -1061,6 +1061,55 @@ function startSearch(sessionId, domains) {
 }
 
 /**
+ * Resume tasks that were running when server stopped
+ * This handles server restarts/crashes gracefully
+ */
+async function resumeInterruptedTasks() {
+  try {
+    // Find all tasks that were "running" when server stopped
+    const runningTasks = await db.getTasks({ status: 'running' });
+
+    if (runningTasks.length === 0) {
+      console.log('No interrupted tasks to resume');
+      return;
+    }
+
+    console.log(`Found ${runningTasks.length} interrupted task(s) to resume...`);
+
+    for (const task of runningTasks) {
+      // Reset any domains that were stuck in "running" status back to "pending"
+      const taskDomains = await db.getTaskDomains(task.id);
+      const stuckDomains = taskDomains.filter(d => d.status === 'running');
+
+      if (stuckDomains.length > 0) {
+        console.log(`  Task ${task.id}: Resetting ${stuckDomains.length} stuck domain(s) to pending`);
+        for (const domain of stuckDomains) {
+          await db.updateTaskDomain(domain.id, 'pending');
+        }
+        // Decrement completed count since these weren't actually completed
+        // (The domain was marked running but never finished)
+      }
+
+      // Set task back to pending so it can be resumed
+      await db.updateTaskStatus(task.id, 'pending');
+      console.log(`  Task ${task.id} "${task.name}" ready to resume (${task.completed_domains}/${task.total_domains} completed)`);
+    }
+
+    // Auto-start the first interrupted task
+    if (runningTasks.length > 0) {
+      const firstTask = runningTasks[0];
+      console.log(`Auto-resuming task ${firstTask.id} "${firstTask.name}"...`);
+      // Small delay to let server fully start
+      setTimeout(() => {
+        runTask(firstTask.id);
+      }, 2000);
+    }
+  } catch (error) {
+    console.error('Error resuming interrupted tasks:', error);
+  }
+}
+
+/**
  * Initialize and start server
  */
 async function startServer() {
@@ -1075,6 +1124,10 @@ async function startServer() {
     // Create admin user if not exists
     console.log('Setting up admin user...');
     await ensureAdminUser();
+
+    // Resume any tasks that were interrupted by server restart
+    console.log('Checking for interrupted tasks...');
+    await resumeInterruptedTasks();
 
     app.listen(PORT, '0.0.0.0', () => {
       console.log('='.repeat(50));

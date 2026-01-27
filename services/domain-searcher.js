@@ -116,6 +116,8 @@ const RESELLER_INDICATORS = [
   // Link building resellers
   'bloggeroutreach.io', 'bloggeroutreach.com', 'ejaz@bloggeroutreach',
   'bazoom', 'app@mg.bazoom',
+  // Resellers who send price lists for sites they don't own
+  'mamacasinos@gmail.com', 'mamacasinos', 'mama casinos',
   // Bulk price list resellers (they send Google Sheets with many sites)
   'markhombarg@gmail.com', 'frankheepsy', 'benjaminrutschle', 'benjamin.marketingoutreach',
   'lancethompson', 'gabrielgoldenberg', 'lunahazel', 'jorjsmith', 'dylankohlstadt',
@@ -212,13 +214,25 @@ function calculateEmailPriority(from, subject, body, targetDomain) {
   const isInquiryReply = OUTBOUND_INQUIRY_PATTERNS.some(pattern =>
     subjectLower.includes(pattern.toLowerCase())
   );
-  const mentionsDomain = subjectLower.includes(targetDomain.toLowerCase()) ||
-    combinedText.includes(targetDomain.toLowerCase());
+  const domainInSubject = subjectLower.includes(targetDomain.toLowerCase());
+  const domainInBody = combinedText.includes(targetDomain.toLowerCase());
+  const mentionsDomain = domainInSubject || domainInBody;
 
-  if (!isOutbound && isReply && isInquiryReply && mentionsDomain) {
-    score += 50; // HUGE bonus - this is a direct reply to OUR inquiry = likely webmaster!
-  } else if (!isOutbound && isReply && isInquiryReply) {
-    score += 40; // Good bonus - reply to our inquiry but domain not in subject
+  // CRITICAL: Check if the subject mentions a DIFFERENT domain (not our target)
+  // This catches emails like "Re: Guest post on mamacasinos.com" when searching for trans4mind.com
+  const otherDomainInSubject = subjectLower.match(/(?:on|for|at)\s+([a-z0-9][-a-z0-9]*\.[a-z]{2,})/i);
+  const isAboutDifferentDomain = otherDomainInSubject &&
+    !otherDomainInSubject[1].includes(targetDomain.toLowerCase()) &&
+    !targetDomain.toLowerCase().includes(otherDomainInSubject[1]);
+
+  if (isAboutDifferentDomain) {
+    score -= 40; // HEAVY penalty - this email is about a different domain!
+  }
+
+  if (!isOutbound && isReply && isInquiryReply && domainInSubject) {
+    score += 50; // HUGE bonus - reply to OUR inquiry WITH target domain in subject = definitely webmaster!
+  } else if (!isOutbound && isReply && isInquiryReply && !isAboutDifferentDomain) {
+    score += 40; // Good bonus - reply to our inquiry, not about a different domain
   } else if (!isOutbound && !isReply) {
     // Not a reply = they initiated contact = likely reseller/spam
     score -= 15; // Penalty for unsolicited contact
@@ -571,16 +585,18 @@ async function searchDomain(domain, accounts) {
     return null;
   }
 
-  // Pick the best price based on recency (latest email date), then priority score as tiebreaker
+  // Pick the best price based on PRIORITY SCORE first (webmaster > reseller), then recency as tiebreaker
+  // This ensures direct webmaster prices ALWAYS win over reseller prices, regardless of date
   foundPrices.sort((a, b) => {
-    // More recent date first (latest email wins)
+    // PRIORITY SCORE is the primary sort key - webmaster emails should ALWAYS win
+    const scoreDiff = b.priorityScore - a.priorityScore;
+    if (scoreDiff !== 0) {
+      return scoreDiff;
+    }
+    // Only use recency as tiebreaker when priority scores are equal
     const dateA = a.emailDate ? new Date(a.emailDate).getTime() : 0;
     const dateB = b.emailDate ? new Date(b.emailDate).getTime() : 0;
-    if (dateB !== dateA) {
-      return dateB - dateA;
-    }
-    // If same date, higher priority score wins
-    return b.priorityScore - a.priorityScore;
+    return dateB - dateA;
   });
 
   const bestResult = foundPrices[0];
