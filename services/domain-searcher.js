@@ -624,11 +624,18 @@ function extractPricingFromBodyRegex(body, targetDomain) {
     return null;
   }
 
+  // SAFETY: Only use regex for emails that look like pricing emails
+  // Must contain pricing-related keywords
+  const hasPricingContext = /(?:budget|price|rate|cost|fee|charge|offer|quote|standard\s*content|guest\s*post|sponsored|per\s*(?:post|article))/i.test(body);
+  if (!hasPricingContext) {
+    return null; // Let AI handle emails without clear pricing context
+  }
+
   let guestPostPrice = null;
   let casinoPrice = null;
   let currency = 'USD';
 
-  // Pattern 1: "Standard content: X USD" or "• Standard content: X USD"
+  // Pattern 1: "Standard content: X USD" or "• Standard content: X USD" (HIGH confidence)
   const standardMatch = body.match(/(?:standard|general|regular)\s*(?:content|post|article)?[:\s]*(\d+)\s*(USD|EUR|GBP|\$|€|£)/i);
   if (standardMatch) {
     guestPostPrice = parseInt(standardMatch[1], 10);
@@ -637,22 +644,22 @@ function extractPricingFromBodyRegex(body, targetDomain) {
     }
   }
 
-  // Pattern 2: "Casino type content: X USD" or "Casino/Gambling: X USD"
+  // Pattern 2: "Casino type content: X USD" or "Casino/Gambling: X USD" (HIGH confidence)
   // Handle complex patterns like "Casino type content, games, cryptocurrencies, cannabis, etc. 135 USD"
   const casinoMatch = body.match(/(?:casino|gambling|betting|igaming)[\s\w,./()]*?(\d+)\s*(USD|EUR|GBP|\$|€|£)/i);
   if (casinoMatch) {
     casinoPrice = parseInt(casinoMatch[1], 10);
   }
 
-  // Pattern 3: "Budget: $X" or "Price: $X" or "Rate: $X"
+  // Pattern 3: "Budget: $X" or "Price: $X" (MEDIUM confidence - only if followed by currency)
   if (!guestPostPrice) {
-    const budgetMatch = body.match(/(?:budget|price|rate|cost|fee)[:\s]*[\$€£]?\s*(\d+)\s*(USD|EUR|GBP)?/i);
+    const budgetMatch = body.match(/(?:budget|price|rate|cost)[:\s]*[\$€£]\s*(\d+)/i);
     if (budgetMatch) {
       guestPostPrice = parseInt(budgetMatch[1], 10);
     }
   }
 
-  // Pattern 4: "$X per post" or "$X per article"
+  // Pattern 4: "$X per post" or "$X per article" (HIGH confidence)
   if (!guestPostPrice) {
     const perPostMatch = body.match(/[\$€£]\s*(\d+)\s*(?:per\s+)?(?:post|article|placement)/i);
     if (perPostMatch) {
@@ -660,22 +667,27 @@ function extractPricingFromBodyRegex(body, targetDomain) {
     }
   }
 
-  // Pattern 5: "X USD" or "X EUR" standalone with context
-  if (!guestPostPrice) {
-    const usdMatch = body.match(/(\d+)\s*(?:USD|EUR|GBP|dollars|euros)/i);
-    if (usdMatch && parseInt(usdMatch[1], 10) >= 10 && parseInt(usdMatch[1], 10) <= 2000) {
-      guestPostPrice = parseInt(usdMatch[1], 10);
-    }
-  }
+  // REMOVED: Generic "X USD" pattern - too many false positives
 
   if (!guestPostPrice) {
+    return null; // No clear price found, let AI handle it
+  }
+
+  // VALIDATION: Price must be in reasonable range for guest posts ($10 - $2000)
+  if (guestPostPrice < 10 || guestPostPrice > 2000) {
+    console.log(`  → Regex: Price ${guestPostPrice} outside valid range, skipping`);
     return null;
+  }
+
+  // VALIDATION: Casino price must also be reasonable
+  if (casinoPrice && (casinoPrice < 10 || casinoPrice > 5000)) {
+    casinoPrice = null; // Invalid, let AI determine
   }
 
   // If no casino price found but casino might be accepted, use guest post price
   if (!casinoPrice && guestPostPrice) {
     // Check if casino is NOT rejected
-    const casinoRejected = /(?:no\s+casino|casino\s+not\s+accepted|no\s+gambling)/i.test(body);
+    const casinoRejected = /(?:no\s+casino|casino\s+not\s+accepted|no\s+gambling|grey\s*niche|restricted)/i.test(body);
     if (!casinoRejected) {
       casinoPrice = guestPostPrice; // Default to same price
     }
