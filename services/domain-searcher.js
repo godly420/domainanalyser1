@@ -608,6 +608,92 @@ async function searchDomain(domain, accounts) {
 }
 
 /**
+ * Extract pricing from email body using regex patterns (no AI needed)
+ * Handles common patterns like "Budget: $X" or "Standard content: X USD"
+ * @param {string} body - Email body text
+ * @param {string} targetDomain - Domain to find pricing for
+ * @returns {Object|null} Extracted pricing or null
+ */
+function extractPricingFromBodyRegex(body, targetDomain) {
+  if (!body || !targetDomain) return null;
+
+  const bodyLower = body.toLowerCase();
+
+  // Check if target domain is mentioned in the email
+  if (!bodyLower.includes(targetDomain.toLowerCase())) {
+    return null;
+  }
+
+  let guestPostPrice = null;
+  let casinoPrice = null;
+  let currency = 'USD';
+
+  // Pattern 1: "Standard content: X USD" or "• Standard content: X USD"
+  const standardMatch = body.match(/(?:standard|general|regular)\s*(?:content|post|article)?[:\s]*(\d+)\s*(USD|EUR|GBP|\$|€|£)/i);
+  if (standardMatch) {
+    guestPostPrice = parseInt(standardMatch[1], 10);
+    if (standardMatch[2]) {
+      currency = standardMatch[2].replace('$', 'USD').replace('€', 'EUR').replace('£', 'GBP');
+    }
+  }
+
+  // Pattern 2: "Casino type content: X USD" or "Casino/Gambling: X USD"
+  // Handle complex patterns like "Casino type content, games, cryptocurrencies, cannabis, etc. 135 USD"
+  const casinoMatch = body.match(/(?:casino|gambling|betting|igaming)[\s\w,./()]*?(\d+)\s*(USD|EUR|GBP|\$|€|£)/i);
+  if (casinoMatch) {
+    casinoPrice = parseInt(casinoMatch[1], 10);
+  }
+
+  // Pattern 3: "Budget: $X" or "Price: $X" or "Rate: $X"
+  if (!guestPostPrice) {
+    const budgetMatch = body.match(/(?:budget|price|rate|cost|fee)[:\s]*[\$€£]?\s*(\d+)\s*(USD|EUR|GBP)?/i);
+    if (budgetMatch) {
+      guestPostPrice = parseInt(budgetMatch[1], 10);
+    }
+  }
+
+  // Pattern 4: "$X per post" or "$X per article"
+  if (!guestPostPrice) {
+    const perPostMatch = body.match(/[\$€£]\s*(\d+)\s*(?:per\s+)?(?:post|article|placement)/i);
+    if (perPostMatch) {
+      guestPostPrice = parseInt(perPostMatch[1], 10);
+    }
+  }
+
+  // Pattern 5: "X USD" or "X EUR" standalone with context
+  if (!guestPostPrice) {
+    const usdMatch = body.match(/(\d+)\s*(?:USD|EUR|GBP|dollars|euros)/i);
+    if (usdMatch && parseInt(usdMatch[1], 10) >= 10 && parseInt(usdMatch[1], 10) <= 2000) {
+      guestPostPrice = parseInt(usdMatch[1], 10);
+    }
+  }
+
+  if (!guestPostPrice) {
+    return null;
+  }
+
+  // If no casino price found but casino might be accepted, use guest post price
+  if (!casinoPrice && guestPostPrice) {
+    // Check if casino is NOT rejected
+    const casinoRejected = /(?:no\s+casino|casino\s+not\s+accepted|no\s+gambling)/i.test(body);
+    if (!casinoRejected) {
+      casinoPrice = guestPostPrice; // Default to same price
+    }
+  }
+
+  console.log(`  → Regex extraction found: GP=${guestPostPrice} ${currency}, Casino=${casinoPrice}`);
+
+  return {
+    guest_post_price: guestPostPrice,
+    casino_price: casinoPrice,
+    currency: currency,
+    casino_accepted: casinoPrice ? 'yes' : 'no',
+    confidence: 'medium',
+    notes: 'Extracted via regex pattern matching'
+  };
+}
+
+/**
  * Process a single email to extract pricing for a specific domain
  * @param {string} account - Email account
  * @param {string} emailId - Email ID
@@ -617,6 +703,28 @@ async function searchDomain(domain, accounts) {
  */
 async function processEmailForDomain(account, emailId, targetDomain, prefetchedData = null) {
   const emailData = prefetchedData || await getEmailWithAttachments(account, emailId);
+
+  // Try regex extraction first (fast, no AI needed)
+  const regexResult = extractPricingFromBodyRegex(emailData.body, targetDomain);
+  if (regexResult && regexResult.guest_post_price) {
+    console.log(`  → Using regex extraction for ${targetDomain}`);
+    const webmasterContact = extractWebmasterContact(emailData.from, emailData.body || '');
+    return {
+      domain: targetDomain,
+      guest_post_price: regexResult.guest_post_price,
+      link_insertion_price: null,
+      sponsored_post_price: null,
+      homepage_link_price: null,
+      casino_price: regexResult.casino_price,
+      casino_accepted: regexResult.casino_accepted,
+      currency: regexResult.currency,
+      source_email: webmasterContact,
+      subject: emailData.subject,
+      account: account,
+      confidence: regexResult.confidence,
+      notes: regexResult.notes
+    };
+  }
 
   // Build combined content
   let combinedContent = `From: ${emailData.from}\nSubject: ${emailData.subject}\n\nBody:\n${emailData.body || ''}`;
