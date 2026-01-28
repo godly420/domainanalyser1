@@ -535,9 +535,18 @@ ${emailContent}
 EXTRACTION INSTRUCTIONS:
 1. Search the email content for the target domain "${targetDomain}" (case-insensitive match)
 2. The email may contain a table or list with multiple websites - find the row/entry for "${targetDomain}"
-3. Extract the pricing for ONLY this target domain
+3. Extract the pricing for this target domain
 4. IMPORTANT: Also check QUOTED/FORWARDED sections (lines starting with > or "From:") - these often contain the agreed price!
 5. Look for phrases like "Price agreed - $X" or "Price: $X" or "$X per post" - these are the ACTUAL agreed prices
+
+CRITICAL - SHARED PRICING PATTERN (VERY COMMON):
+- Webmasters often own MULTIPLE sites and offer ONE price for ALL of them
+- Pattern: "We offer [site.com] and all our websites/media" + "Budget: $X" + list of domains
+- If you see a price stated BEFORE or AFTER a list of domains, that price applies to ALL domains in the list
+- Example email: "We offer infoblancosobrenegro.com and all our websites. Budget: $70 standard, $135 casino" followed by a list including "${targetDomain}"
+- In this case: guest_post_price=70, casino_price=135 for "${targetDomain}"
+- Key phrases: "all our websites", "all our media", "all sites", "same price", "our network"
+- DO NOT return found:false just because the price isn't on the same line as the domain!
 
 CRITICAL - NEGOTIATED PRICE DETECTION:
 - If the email contains BOTH an initial quote AND a negotiated/counter-offer price, ALWAYS use the LOWER (negotiated) price
