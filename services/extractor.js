@@ -627,17 +627,19 @@ IMPORTANT:
 - Default casino_accepted to "yes" unless explicitly rejected in the email
 
 STRICT VALIDATION - DO NOT HALLUCINATE:
-- ONLY return a price if there is an EXPLICIT price value directly associated with the target domain
-- The price must appear on the SAME LINE or SAME TABLE ROW as the target domain
+- ONLY return a price if there is an EXPLICIT price value associated with the target domain
 - The price must have a currency symbol ($, €, £) OR be in a clearly labeled price column
-- If the domain is just MENTIONED but has no price next to it, return found: false
 - If you're unsure whether a number is a price or a metric (DA/DR/Traffic), return found: false
-- NEVER guess or infer prices - only extract explicitly stated prices
-- If the sheet/table row for this domain has empty price cells, return found: false
 - A price like "$150" or "€200" is explicit. A number like "42" without context is NOT a price
-- Do NOT use prices from OTHER domains in the same email - each domain has its own price
-- If the row for "${targetDomain}" shows empty/blank price cells, return found: false
-- WHEN IN DOUBT, return found: false - it's better to miss a price than to report a wrong one`;
+- WHEN IN DOUBT, return found: false - it's better to miss a price than to report a wrong one
+
+CRITICAL - "ONE PRICE FOR ALL SITES" PATTERN:
+- Webmasters often say "we offer [site] AND ALL OUR WEBSITES/MEDIA" with a SINGLE price
+- If the email states a price and then lists multiple domains, that price applies to ALL listed domains
+- Example: "We offer site.com and all our websites. Budget: $70 standard, $135 casino" followed by a list of domains
+- In this case, if the target domain appears in the list, USE the stated price even if not on the same line
+- The key phrase is "all our websites", "all our media", "all sites listed", "same price for all"
+- This is NOT hallucination - the webmaster explicitly said the price applies to all their sites`;
 
     const response = await openai.chat.completions.create({
       model: config.openai.model,
