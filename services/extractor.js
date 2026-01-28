@@ -107,15 +107,11 @@ EXTRACTION INSTRUCTIONS:
    - Casino Post (also called "Casino Content", "iGaming", "Gambling content")
 5. Determine if casino/gambling content is accepted:
    - If casino pricing exists, casino IS accepted
-   - Look for acceptance: "casino accepted", "gambling OK", "iGaming welcome"
-   - Look for REJECTION in ANY language:
-     * English: "no casino", "casino not accepted", "no gambling", "grey niche rejected"
-     * Spanish: "no aceptamos casino", "sin casino", "casino no aceptado"
-     * German: "kein casino", "casino nicht akzeptiert"
-     * French: "pas de casino", "casino non accepté"
-     * Portuguese: "sem casino", "casino não aceito"
-     * Italian: "casino non accettato", "niente casino"
-   - If explicit rejection found, set casino_accepted="no"
+   - Use your intelligence to detect if the webmaster is REJECTING casino/gambling content in ANY language
+   - Understand the MEANING/INTENT - if they're declining, refusing, or saying no to casino, that's rejection
+   - Table indicators: "X", "No", "-", "N/A", "❌" in casino column = rejection
+   - If rejection detected, set casino_accepted="no"
+   - If no rejection found, default to casino_accepted="yes"
 6. Identify the currency used (USD, EUR, GBP, INR, etc.)
 6. Extract any additional pricing details or conditions
 7. Assess confidence level:
@@ -602,16 +598,13 @@ CRITICAL CASINO PRICE RULES:
 - CRITICAL: If NO SEPARATE casino price column exists, set casino_price = guest_post_price (the general/permanent price)
 - Remember: Use the PERMANENT price for casino too (not 1-year price)
 
-CASINO REJECTION DETECTION (MULTI-LANGUAGE) - Set casino_accepted="no" if ANY of these appear:
-- English: "no casino", "casino not accepted", "no gambling", "grey niche rejected", "restricted niches not accepted", "no betting", "no igaming", "gambling not allowed", "we don't accept casino", "casino rejected"
-- Spanish: "no aceptamos casino", "sin casino", "casino no aceptado", "no apuestas", "juegos de azar no"
-- German: "kein casino", "casino nicht akzeptiert", "kein glücksspiel", "keine wetten"
-- French: "pas de casino", "casino non accepté", "pas de jeux d'argent", "interdit casino"
-- Portuguese: "sem casino", "casino não aceito", "não aceitamos casino", "sem apostas"
-- Italian: "no casino", "casino non accettato", "niente casino", "scommesse no"
-- Common indicators: "X" or "No" or "-" or "N/A" in casino column, "grey niches: no", "adult/casino: rejected"
-- ONLY set casino_accepted to "no" if there's explicit rejection text in ANY language
-- If no explicit rejection found, default to casino_accepted="yes"
+CASINO REJECTION DETECTION - Use your intelligence to detect rejection intent:
+- The webmaster may say they don't accept casino/gambling/betting content in ANY language
+- Understand the MEANING, not specific phrases - if someone is declining or refusing casino content, that's rejection
+- Table indicators for rejection: "X", "No", "-", "N/A", "❌", "Not available", empty cell with other prices filled
+- Context clues: "grey niches", "restricted content", "sensitive topics" being rejected
+- If you detect ANY indication that casino/gambling content is NOT welcome, set casino_accepted="no"
+- If no rejection detected or casino pricing exists, default to casino_accepted="yes"
 
 OUTPUT FORMAT (JSON only):
 {
