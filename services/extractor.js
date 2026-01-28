@@ -105,7 +105,17 @@ EXTRACTION INSTRUCTIONS:
    - Sponsored Post (similar to guest post but may be marked as sponsored)
    - Homepage Link (also called "Homepage Placement", "Front Page Link")
    - Casino Post (also called "Casino Content", "iGaming", "Gambling content")
-5. Determine if casino/gambling content is accepted (look for "casino accepted", "gambling OK", "iGaming welcome", or any mention of casino pricing - if casino pricing exists, casino is accepted)
+5. Determine if casino/gambling content is accepted:
+   - If casino pricing exists, casino IS accepted
+   - Look for acceptance: "casino accepted", "gambling OK", "iGaming welcome"
+   - Look for REJECTION in ANY language:
+     * English: "no casino", "casino not accepted", "no gambling", "grey niche rejected"
+     * Spanish: "no aceptamos casino", "sin casino", "casino no aceptado"
+     * German: "kein casino", "casino nicht akzeptiert"
+     * French: "pas de casino", "casino non accepté"
+     * Portuguese: "sem casino", "casino não aceito"
+     * Italian: "casino non accettato", "niente casino"
+   - If explicit rejection found, set casino_accepted="no"
 6. Identify the currency used (USD, EUR, GBP, INR, etc.)
 6. Extract any additional pricing details or conditions
 7. Assess confidence level:
@@ -589,11 +599,19 @@ CRITICAL CASINO PRICE RULES:
 - Common table formats have columns like: "Domain | GP | Casino" or "Site | General | Casino/Forex"
 - The casino price is OFTEN different (usually HIGHER, like 2x-5x) than the general price
 - If you see TWO different prices for the same domain (e.g., "$20" and "$100"), the HIGHER one is likely the casino price
-- If there's NO explicit restriction saying "casino not accepted", "no gambling", "grey niche rejected" etc., then casino IS accepted
 - CRITICAL: If NO SEPARATE casino price column exists, set casino_price = guest_post_price (the general/permanent price)
-- ONLY set casino_accepted to "no" if there's explicit text rejecting casino/gambling content
-- ONLY set casino_price to null if casino is explicitly NOT accepted
 - Remember: Use the PERMANENT price for casino too (not 1-year price)
+
+CASINO REJECTION DETECTION (MULTI-LANGUAGE) - Set casino_accepted="no" if ANY of these appear:
+- English: "no casino", "casino not accepted", "no gambling", "grey niche rejected", "restricted niches not accepted", "no betting", "no igaming", "gambling not allowed", "we don't accept casino", "casino rejected"
+- Spanish: "no aceptamos casino", "sin casino", "casino no aceptado", "no apuestas", "juegos de azar no"
+- German: "kein casino", "casino nicht akzeptiert", "kein glücksspiel", "keine wetten"
+- French: "pas de casino", "casino non accepté", "pas de jeux d'argent", "interdit casino"
+- Portuguese: "sem casino", "casino não aceito", "não aceitamos casino", "sem apostas"
+- Italian: "no casino", "casino non accettato", "niente casino", "scommesse no"
+- Common indicators: "X" or "No" or "-" or "N/A" in casino column, "grey niches: no", "adult/casino: rejected"
+- ONLY set casino_accepted to "no" if there's explicit rejection text in ANY language
+- If no explicit rejection found, default to casino_accepted="yes"
 
 OUTPUT FORMAT (JSON only):
 {
